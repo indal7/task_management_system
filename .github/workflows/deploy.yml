@@ -49,7 +49,7 @@ jobs:
         docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
         echo "✅ Pushed $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-  # ── Deploy to EC2 ────────────────────────────────────────────────────────────
+  # ── Deploy to EC2 ──────────────────────────────────────────────────────────
   deploy:
     name: Deploy Flask App
     runs-on: ubuntu-latest
@@ -83,6 +83,7 @@ jobs:
         IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
         AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'taskmanager-dev' }}
+        EC2_HOST: ${{ secrets.EC2_HOST }}
       run: |
         ssh -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST }} << ENDSSH
           set -e
@@ -151,4 +152,3 @@ jobs:
         echo "App: http://${{ secrets.EC2_HOST }}:5000"
         echo "Health: http://${{ secrets.EC2_HOST }}:5000/health"
         echo "Image tag: ${{ needs.build-and-push.outputs.image_tag }}"
-
