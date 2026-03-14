@@ -68,14 +68,14 @@ jobs:
         chmod 600 ~/.ssh/github-actions-key.pem
 
         # Add to known hosts
-        ssh-keyscan -H 35.154.229.200 >> ~/.ssh/known_hosts 2>/dev/null || echo "Adding to known hosts..."
+        ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || echo "Adding to known hosts..."
 
         # Test SSH connection
         echo "🔍 Testing SSH connection..."
         ssh -i ~/.ssh/github-actions-key.pem \
             -o ConnectTimeout=30 \
             -o StrictHostKeyChecking=no \
-            ubuntu@35.154.229.200 \
+            "ubuntu@${{ secrets.EC2_HOST }}" \
             "echo '✅ SSH connection successful - $(date)'"
 
     - name: Pull latest image and restart containers on EC2
@@ -84,7 +84,7 @@ jobs:
         AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'taskmanager-dev' }}
       run: |
-        ssh -i ~/.ssh/github-actions-key.pem ubuntu@35.154.229.200 << ENDSSH
+        ssh -i ~/.ssh/github-actions-key.pem "ubuntu@${{ secrets.EC2_HOST }}" << ENDSSH
           set -e
 
           # Authenticate Docker with ECR
@@ -126,7 +126,7 @@ jobs:
 
     - name: Verify Deployment
       run: |
-        ssh -i ~/.ssh/github-actions-key.pem ubuntu@35.154.229.200 << 'EOF'
+        ssh -i ~/.ssh/github-actions-key.pem "ubuntu@${{ secrets.EC2_HOST }}" << 'EOF'
           if sudo docker ps | grep -q "taskmanager_app"; then
             echo "✅ Flask container is running"
             echo "📋 App logs (last 20 lines):"
@@ -148,7 +148,7 @@ jobs:
     - name: Notify Deployment Success
       run: |
         echo "🚀 Deployment successful!"
-        echo "App: http://35.154.229.200:5000"
-        echo "Health: http://35.154.229.200:5000/health"
+        echo "App: http://${{ secrets.EC2_HOST }}:5000"
+        echo "Health: http://${{ secrets.EC2_HOST }}:5000/health"
         echo "Image tag: ${{ needs.build-and-push.outputs.image_tag }}"
 
