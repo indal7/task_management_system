@@ -60,7 +60,7 @@ resource "aws_security_group" "ec2" {
 # ── RDS Security Group ─────────────────────────────────────────────────────────
 resource "aws_security_group" "rds" {
   name        = "${var.project_name}-${var.environment}-rds-sg"
-  description = "Security group for RDS PostgreSQL – allow access from EC2 only"
+  description = "Security group for RDS PostgreSQL - allow access from EC2 only"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -86,7 +86,7 @@ resource "aws_security_group" "rds" {
 # ── ElastiCache / Redis Security Group ────────────────────────────────────────
 resource "aws_security_group" "redis" {
   name        = "${var.project_name}-${var.environment}-redis-sg"
-  description = "Security group for ElastiCache Redis – allow access from EC2 only"
+  description = "Security group for ElastiCache Redis - allow access from EC2 only"
   vpc_id      = var.vpc_id
 
   ingress {

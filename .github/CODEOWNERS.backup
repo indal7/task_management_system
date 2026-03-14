@@ -1,0 +1,12 @@
+# Global code owner - requires @indals approval for all changes
+* @indals
+
+# You can also be more specific if needed:
+# Require approval for specific file types
+# *.js @indals
+# *.py @indals
+# *.md @indals
+
+# Require approval for specific directories
+# /src/ @indals
+# /docs/ @indals
