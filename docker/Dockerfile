@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy production requirements first for layer caching
 COPY requirements/base.txt requirements/base.txt
-COPY requirements/production.txt requirements/production.txt
+# COPY requirements/production.txt requirements/production.txt
 
 # Install production Python dependencies
 RUN pip install --no-cache-dir -r requirements/production.txt
