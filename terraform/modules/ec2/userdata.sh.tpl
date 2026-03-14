@@ -14,6 +14,7 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 echo "[$(date)] ▶ Starting Task Management System bootstrap"
 
 # ── System Updates ─────────────────────────────────────────────────────────────
+apt-get update -y
 apt-get install -y --no-install-recommends \
   ca-certificates curl gnupg lsb-release \
   jq unzip python3-pip
