@@ -7,12 +7,15 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from flask_migrate import Migrate
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 
 # Initialize extensions
 db = SQLAlchemy()
 jwt = JWTManager()
 migrate = Migrate()
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 def create_app(config_class):
     """Create Flask application instance"""
@@ -32,6 +35,16 @@ def create_app(config_class):
     jwt.init_app(app)
     migrate.init_app(app, db)
     app.logger.info("✅ Database extensions initialized")
+
+    # Initialize rate limiter
+    if app.config.get('RATELIMIT_ENABLED', True):
+        limiter.storage_uri = app.config.get(
+            'RATELIMIT_STORAGE_URL', 'memory://'
+        )
+    else:
+        limiter.storage_uri = 'memory://'
+    limiter.init_app(app)
+    app.logger.info("✅ Rate limiter initialized")
 
     # Initialize caching
     from app.utils.cache_utils import init_cache
@@ -78,6 +91,11 @@ def register_basic_error_handlers(app):
         app.logger.warning(f"404 Error: {error}")
         return {'error': 'Resource not found'}, 404
     
+    @app.errorhandler(429)
+    def rate_limit_exceeded(error):
+        app.logger.warning(f"Rate limit exceeded: {error}")
+        return {'error': 'Too many requests. Please try again later.'}, 429
+
     @app.errorhandler(500)
     def internal_error(error):
         db.session.rollback()
@@ -92,3 +110,4 @@ def register_basic_error_handlers(app):
         if app.config.get('DEBUG'):
             raise e
         return {'error': 'An unexpected error occurred'}, 500
+

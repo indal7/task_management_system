@@ -3,14 +3,15 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.services.auth_service import AuthService
 from app.utils.response import (
-    success_response, error_response, created_response, 
+    success_response, error_response, created_response,
     not_found_response, validation_error_response, server_error_response,
     unauthorized_response
 )
 from app.utils.cache_utils import cache, user_cache_key
 from app.utils.logger import get_logger, log_auth_event, log_cache_operation
-import json
 from app.utils.decorators import log_request
+from app import limiter
+import json
 
 
 auth_bp = Blueprint('auth_bp', __name__, url_prefix='/api/auth')
@@ -18,12 +19,13 @@ logger = get_logger('auth')
 
 
 @auth_bp.route('/register', methods=['POST'])
+@limiter.limit("10 per hour")
 def register():
     data = request.get_json()
     username = data.get("name")
     email = data.get("email")
     password = data.get("password")
-    role = data.get("role", "EMPLOYEE")  # Default role is "user"
+    role = data.get("role", "DEVELOPER")  # Default role
 
     logger.debug(f"Register attempt | Email: {email} | Name: {username}")
 
@@ -42,11 +44,11 @@ def register():
 
 
 @auth_bp.route('/login', methods=['POST'])
+@limiter.limit("20 per minute")
 @log_request
 def login():
 
     data = request.get_json()
-    user_ip = request.remote_addr
     email = data.get('email')
     password = data.get('password')
 
@@ -62,7 +64,6 @@ def login():
 
     # Authenticate user
     result = AuthService.login_user(email, password)
-    logger.info(f"Authentication result for {email}: {result}")
     if not result["success"]:
         logger.warning(f"Login failed for {email}: {result['error']}")
         log_auth_event("Login", email=email, success=False)
@@ -111,6 +112,7 @@ def update_profile():
 
 @auth_bp.route('/change-password', methods=['POST'])
 @jwt_required()
+@limiter.limit("5 per hour")
 def update_password():
     data = request.get_json()
     user_id = get_jwt_identity()
@@ -140,5 +142,5 @@ def test():
 @jwt_required()
 def get_users():
     users = AuthService.get_all_users_ids_and_names()
-    # logger.info(f"Fetched users list | Count: {len(users)}")
     return success_response("Users retrieved successfully", users)
+

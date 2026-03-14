@@ -8,23 +8,31 @@ jobs:
   deploy:
     name: Deploy Flask App
     runs-on: ubuntu-latest
+    # Only run the full deployment when the EC2 key secret is available.
+    # If the secret is absent the job is skipped gracefully instead of
+    # timing out for 30+ seconds on an SSH connection attempt.
+    if: secrets.EC2_KEY != ''
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Add SSH Key and Wait for EC2
       run: |
         mkdir -p ~/.ssh
         echo "${{ secrets.EC2_KEY }}" > ~/.ssh/github-actions-key.pem
         chmod 600 ~/.ssh/github-actions-key.pem
-        
-        # Add to known hosts (skip strict checking since we know it works)
+
+        # Add to known hosts
         ssh-keyscan -H 35.154.229.200 >> ~/.ssh/known_hosts 2>/dev/null || echo "Adding to known hosts..."
-        
+
         # Test SSH connection
         echo "🔍 Testing SSH connection..."
-        ssh -i ~/.ssh/github-actions-key.pem -o ConnectTimeout=30 -o StrictHostKeyChecking=no ubuntu@35.154.229.200 "echo '✅ SSH connection successful - $(date)'"
+        ssh -i ~/.ssh/github-actions-key.pem \
+            -o ConnectTimeout=30 \
+            -o StrictHostKeyChecking=no \
+            ubuntu@35.154.229.200 \
+            "echo '✅ SSH connection successful - $(date)'"
 
     - name: Copy files to EC2
       run: |
@@ -133,7 +141,7 @@ jobs:
             
             # Test if app is responding
             sleep 5
-            if curl -f http://localhost:5000 > /dev/null 2>&1; then
+            if curl -f http://localhost:5000/health > /dev/null 2>&1; then
               echo "✅ App is responding on port 5000"
             else
               echo "⚠️  App may not be responding yet, check logs"

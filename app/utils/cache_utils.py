@@ -15,9 +15,19 @@ logger = logging.getLogger('app.cache')
 cache = Cache()
 
 def init_cache(app):
-    """Initialize caching with the Flask app"""
-    app.config["CACHE_TYPE"] = "RedisCache"
-    app.config["CACHE_REDIS_URL"] = f"redis://{os.getenv('REDIS_HOST', 'redis')}:{os.getenv('REDIS_PORT', 6379)}/0"
+    """Initialize caching with the Flask app.
+
+    Respects CACHE_TYPE from the app config so tests can use SimpleCache
+    without requiring a Redis connection.
+    """
+    # Only override CACHE_TYPE/URL if not already set to a non-Redis backend
+    # (e.g. TestingConfig sets CACHE_TYPE = "SimpleCache").
+    if app.config.get("CACHE_TYPE") in (None, "RedisCache"):
+        app.config.setdefault("CACHE_TYPE", "RedisCache")
+        app.config.setdefault(
+            "CACHE_REDIS_URL",
+            f"redis://{os.getenv('REDIS_HOST', 'redis')}:{os.getenv('REDIS_PORT', 6379)}/0",
+        )
     cache.init_app(app)
     return cache
 
