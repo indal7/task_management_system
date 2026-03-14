@@ -71,8 +71,19 @@ JWT_SECRET_KEY=$(aws secretsmanager get-secret-value \
   --output    text)
 
 # ── Write Environment File ─────────────────────────────────────────────────────
+# Write Environment File
 APP_DIR="/home/ubuntu/taskmanager"
 mkdir -p "$APP_DIR/env"
+
+cat > "$APP_DIR/env/.env.prod" << EOF
+# Your env vars here
+EOF
+
+# Fix permissions so ubuntu user can read it
+chown -R ubuntu:ubuntu "$APP_DIR"
+chmod 755 "$APP_DIR"
+chmod 644 "$APP_DIR/env/.env.prod"
+
 
 DATABASE_URL="postgresql://${db_username}:$${DB_PASSWORD}@${db_host}/${db_name}?sslmode=require"
 REDIS_URL="redis://${redis_host}:${redis_port}/0"
