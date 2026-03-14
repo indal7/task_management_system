@@ -1,0 +1,157 @@
+name: Deploy Flask to EC2
+
+on:
+  push:
+    branches: [ master ]   # Trigger when pushing to master branch
+
+jobs:
+  deploy:
+    name: Deploy Flask App
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Add SSH Key and Wait for EC2
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_KEY }}" > ~/.ssh/github-actions-key.pem
+        chmod 600 ~/.ssh/github-actions-key.pem
+        
+        # Add to known hosts (skip strict checking since we know it works)
+        ssh-keyscan -H 35.154.229.200 >> ~/.ssh/known_hosts 2>/dev/null || echo "Adding to known hosts..."
+        
+        # Test SSH connection
+        echo "🔍 Testing SSH connection..."
+        ssh -i ~/.ssh/github-actions-key.pem -o ConnectTimeout=30 -o StrictHostKeyChecking=no ubuntu@35.154.229.200 "echo '✅ SSH connection successful - $(date)'"
+
+    - name: Copy files to EC2
+      run: |
+        rsync -avz -e "ssh -i ~/.ssh/github-actions-key.pem -o StrictHostKeyChecking=no" \
+          --exclude='.git' \
+          --exclude='*.pyc' \
+          --exclude='__pycache__' \
+          --exclude='.env*' \
+          . ubuntu@35.154.229.200:/home/ubuntu/taskmanager
+
+    - name: Create Environment Files
+      run: |
+        ssh -i ~/.ssh/github-actions-key.pem ubuntu@35.154.229.200 << 'EOF'
+          mkdir -p /home/ubuntu/taskmanager/env
+          
+          # Create .env.dev file with all environment variables
+          cat > /home/ubuntu/taskmanager/env/.env.dev << 'ENVEOF'
+        # Production Environment Configuration
+        FLASK_ENV=production
+        FLASK_HOST=0.0.0.0
+        FLASK_PORT=5000
+        FLASK_DEBUG=false
+
+        # Security Keys
+        SECRET_KEY=prod-secret-key-change-this-in-production-12345678
+        JWT_SECRET_KEY=prod-jwt-secret-key-change-this-in-production-87654321
+
+        # Database
+        DATABASE_URL=postgresql://myuser:MySecurePassword123%21@dev-database.c1qe2o6s6oix.ap-south-1.rds.amazonaws.com:5432/myapp?sslmode=require
+
+        # Redis (using container network)
+        REDIS_URL=redis://redis:6379/0
+
+        # Email (development settings)
+        MAIL_SERVER=smtp.mailtrap.io
+        MAIL_PORT=2525
+        MAIL_USE_TLS=true
+        MAIL_USERNAME=your-mailtrap-username
+        MAIL_PASSWORD=your-mailtrap-password
+
+        # Logging
+        LOG_LEVEL=INFO
+
+        # Cache settings (using container network)
+        CACHE_TYPE=RedisCache
+        CACHE_REDIS_URL=redis://redis:6379/1
+        CACHE_DEFAULT_TIMEOUT=300
+        ENVEOF
+        EOF
+
+    - name: Install Dependencies and Deploy
+      run: |
+        ssh -i ~/.ssh/github-actions-key.pem ubuntu@35.154.229.200 << 'EOF'
+          set -e
+          cd /home/ubuntu/taskmanager
+
+          # Update system packages
+          sudo apt-get update -y
+
+          # Install Docker if not present
+          if ! command -v docker &> /dev/null; then
+            curl -fsSL https://get.docker.com -o get-docker.sh
+            sudo sh get-docker.sh
+            sudo usermod -aG docker ubuntu
+            rm get-docker.sh
+          fi
+
+          # Install Docker Compose if not present
+          if ! command -v docker-compose &> /dev/null; then
+            sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+          fi
+
+          # Environment file should already be created in previous step
+          if [ ! -f "env/.env.dev" ]; then
+            echo "❌ Environment file not found!"
+            exit 1
+          fi
+
+          # Stop and remove old containers
+          sudo docker-compose -f docker/docker-compose.yml down --remove-orphans || true
+          
+          # Remove old images to force rebuild
+          sudo docker system prune -f || true
+
+          # Build and start new containers
+          sudo docker-compose -f docker/docker-compose.yml up -d --build --force-recreate
+
+          # Wait for containers to start
+          sleep 15
+
+          # Show running containers
+          sudo docker ps
+        EOF
+
+    - name: Verify Deployment
+      run: |
+        ssh -i ~/.ssh/github-actions-key.pem ubuntu@35.154.229.200 << 'EOF'
+          # Check if containers are running
+          if sudo docker ps | grep -q "taskmanager_app" && sudo docker ps | grep -q "taskmanager_redis"; then
+            echo "✅ Flask + Redis containers are running"
+            
+            # Check app logs
+            echo "📋 App logs (last 20 lines):"
+            sudo docker logs taskmanager_app --tail=20
+            
+            # Test if app is responding
+            sleep 5
+            if curl -f http://localhost:5000 > /dev/null 2>&1; then
+              echo "✅ App is responding on port 5000"
+            else
+              echo "⚠️  App may not be responding yet, check logs"
+            fi
+          else
+            echo "❌ Deployment failed - containers not running"
+            echo "Container status:"
+            sudo docker ps -a
+            echo "App logs:"
+            sudo docker logs taskmanager_app --tail=50 || true
+            echo "Redis logs:"
+            sudo docker logs taskmanager_redis --tail=20 || true
+            exit 1
+          fi
+        EOF
+
+    - name: Notify Deployment Success
+      run: |
+        echo "🚀 Deployment successful!"
+        echo "App should be accessible at: http://35.154.229.200:5000"
+        echo "SSH access: ssh -i ~/.ssh/github-actions-key ubuntu@35.154.229.200"

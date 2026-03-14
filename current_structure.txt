@@ -1,0 +1,79 @@
+.
+├── app
+│   ├── __init__.py
+│   ├── models
+│   │   ├── __init__.py
+│   │   ├── enums.py
+│   │   ├── notification.py
+│   │   ├── project_member.py
+│   │   ├── project.py
+│   │   ├── sprint.py
+│   │   ├── task_attachment.py
+│   │   ├── task_comment.py
+│   │   ├── task.py
+│   │   ├── time_log.py
+│   │   └── user.py
+│   ├── routes
+│   │   ├── __init__.py
+│   │   ├── analytics_routes.py
+│   │   ├── auth_routes.py
+│   │   ├── cache_routes.py
+│   │   ├── comment_routes.py
+│   │   ├── enum_routes.py
+│   │   ├── notification_routes.py
+│   │   ├── project_routes.py
+│   │   ├── sprint_routes.py
+│   │   └── task_routes.py
+│   ├── services
+│   │   ├── __init__.py
+│   │   ├── analytics_service.py
+│   │   ├── auth_service.py
+│   │   ├── comment_service.py
+│   │   ├── notification_service.py
+│   │   ├── project_service.py
+│   │   ├── sprint_service.py
+│   │   └── task_service.py
+│   ├── urls.py
+│   └── utils
+│       ├── __init__.py
+│       ├── cache_utils.py
+│       ├── database.py
+│       ├── decorators.py
+│       ├── jwt_utils.py
+│       ├── logger.py
+│       ├── response.py
+│       ├── socket_utils.py
+│       └── validators.py
+├── app.py
+├── config
+│   ├── __init__.py
+│   ├── base.py
+│   ├── dev.py
+│   └── development.py
+├── current_structure.txt
+├── docker
+│   ├── docker-compose.yml
+│   └── Dockerfile
+├── manage.py
+├── migrations
+│   ├── alembic.ini
+│   ├── env.py
+│   ├── README
+│   ├── script.py.mako
+│   └── versions
+│       ├── 0e51fd3ecd4b_initial_migration.py
+│       └── 51dfb5b5dfcc_initial_migration.py
+├── README
+│   └── README.md
+├── requirements
+│   ├── base.txt
+│   ├── dev.txt
+│   └── production.txt
+├── scripts
+│   ├── __init__.py
+│   ├── init_db.py
+│   └── setup_sample_data.py
+├── test_socket_client.py
+└── wsgi.py
+
+13 directories, 64 files

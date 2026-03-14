@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  app:
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: taskmanager_app
+    command: python app.py
+    environment:
+      - FLASK_ENV=development
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=5000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    env_file:
+      - ../env/.env.dev
+    volumes:
+      - ..:/app
+    ports:
+      - "5000:5000"
+    depends_on:
+      - redis
+    networks:
+      - taskmanager_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: taskmanager_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/var/lib/redis/data
+    command: redis-server --appendonly yes
+    networks:
+      - taskmanager_network
+
+volumes:
+  redis_data:
+
+networks:
+  taskmanager_network:
+    driver: bridge
