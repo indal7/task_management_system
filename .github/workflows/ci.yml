@@ -51,4 +51,5 @@ jobs:
           SECRET_KEY: ci-test-secret-key
           JWT_SECRET_KEY: ci-jwt-test-secret
         run: |
+          export PYTHONPATH="${PYTHONPATH}:$(pwd)"
           pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
