@@ -6,7 +6,10 @@ from functools import wraps
 from flask_jwt_extended import get_jwt_identity
 import json
 import hashlib
+import logging
 import os
+
+logger = logging.getLogger('app.cache')
 
 # Initialize cache (will be configured in __init__.py)
 cache = Cache()
@@ -84,9 +87,9 @@ def invalidate_user_cache(user_id, pattern="*"):
             client.delete(key)
             deleted += 1
         if deleted > 0:
-            print(f"🗑️ Invalidated {deleted} cache entries for user {user_id}")
+            logger.debug("Invalidated %d cache entries for user %s", deleted, user_id)
     except Exception as e:
-        print(f"⚠️ Cache invalidation failed: {e}")
+        logger.warning("Cache invalidation failed for user %s: %s", user_id, e)
 
 def invalidate_project_cache(project_id):
     """Invalidate all cache entries related to a project"""
@@ -97,9 +100,9 @@ def invalidate_project_cache(project_id):
             client.delete(key)
             deleted += 1
         if deleted > 0:
-            print(f"🗑️ Invalidated {deleted} cache entries for project {project_id}")
+            logger.debug("Invalidated %d cache entries for project %s", deleted, project_id)
     except Exception as e:
-        print(f"⚠️ Cache invalidation failed: {e}")
+        logger.warning("Cache invalidation failed for project %s: %s", project_id, e)
 
 # Common cache patterns
 class CacheKeys:
@@ -119,5 +122,4 @@ class CacheKeys:
     SETTINGS = "settings"
     USER_SPRINTS = "user_sprints"
     USER_ANALYTICS = "user_analytics"
-    USER_COMMENTS = "user_comments"
     TASK_COMMENTS = "task_comments"

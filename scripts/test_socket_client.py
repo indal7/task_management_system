@@ -3,9 +3,10 @@
 Socket.IO Test Client for Terminal Testing
 
 Run this to test socket connections from terminal:
-python test_socket_client.py
+    TEST_EMAIL=user@example.com TEST_PASSWORD=secret python scripts/test_socket_client.py
 """
 
+import os
 import socketio
 import time
 import requests
@@ -67,8 +68,10 @@ class SocketTestClient:
         def on_pong(data):
             print(f"🏓 Pong received: {data}")
 
-    def login(self, username='indalsaroj404@gmail.com', password='123456789'):
+    def login(self, username=None, password=None):
         """Login to get JWT token"""
+        username = username or os.environ.get('TEST_EMAIL', 'test@example.com')
+        password = password or os.environ.get('TEST_PASSWORD', '')
         try:
             response = requests.post(f'{self.server_url}/api/auth/login', json={
                 'email': username,

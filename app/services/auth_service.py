@@ -24,13 +24,13 @@ class AuthService:
             existing_user = User.query.filter_by(email=email).first()
             if existing_user:
                 logger.warning(f"Attempt to register existing email: {email}")
-                return {"error": "User with this email already exists"}, 400
+                return {"error": "User with this email already exists"}
 
             hashed_password = generate_password_hash(password)
             try:
                 user_role = UserRole[role.upper()]
             except KeyError:
-                return {"error": "Invalid role"}, 400
+                return {"error": "Invalid role"}
 
             user = User(name=username, email=email, role=user_role, password_hash=hashed_password)
             db.session.add(user)
@@ -41,12 +41,12 @@ class AuthService:
             # Invalidate global user cache
             invalidate_user_cache(user.id)
 
-            return {"message": "User registered successfully", "user": user.to_dict()}, 201
+            return {"message": "User registered successfully", "user": user.to_dict()}
 
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error registering user {email}: {str(e)}")
-            return {"error": f"Error registering user: {str(e)}"}, 500
+            return {"error": f"Error registering user: {str(e)}"}
 
     @staticmethod
     def login_user(email, password):
@@ -56,11 +56,11 @@ class AuthService:
 
             if not user:
                 logger.warning(f"Login attempt failed. User not found: {email}")
-                return {"success": False, "error": "User not found, please register first"}, 404
+                return {"success": False, "error": "User not found, please register first"}
 
             if not user.check_password(password):
                 logger.warning(f"Login attempt failed. Invalid password for user: {email}")
-                return {"success": False, "error": "Invalid credentials"}, 401
+                return {"success": False, "error": "Invalid credentials"}
 
             access_token = create_access_token(identity=str(user.id))
             refresh_token = create_refresh_token(identity=str(user.id))
@@ -75,7 +75,7 @@ class AuthService:
 
         except Exception as e:
             logger.error(f"Error logging in user {email}: {str(e)}")
-            return {"error": f"Error logging in user: {str(e)}"}, 500
+            return {"success": False, "error": f"Error logging in user: {str(e)}"}
 
     @staticmethod
     @jwt_required()
@@ -107,7 +107,7 @@ class AuthService:
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error changing password for user {user_id}: {str(e)}")
-            return {"error": f"Error changing password: {str(e)}"}, 500
+            return {"error": f"Error changing password: {str(e)}"}
 
     @staticmethod
     @jwt_required(refresh=True)
@@ -152,7 +152,7 @@ class AuthService:
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error updating profile for user {user_id}: {str(e)}")
-            return {'error': f'Error updating profile: {str(e)}'}, 400
+            return {'error': f'Error updating profile: {str(e)}'}
 
     @staticmethod
     @cached_per_user(timeout=300, key_prefix=CacheKeys.USERS)
@@ -161,8 +161,7 @@ class AuthService:
         try:
             users = User.get_all_user_ids_and_names()
             logger.info(f"Fetched {len(users)} users")
-            logger.info(f"type of users: {type(users)}")
             return users
         except Exception as e:
             logger.error(f"Failed to fetch users: {str(e)}")
-            return {'error': f'Failed to fetch users: {str(e)}'}, 500
+            return {'error': f'Failed to fetch users: {str(e)}'}

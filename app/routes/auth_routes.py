@@ -10,7 +10,7 @@ from app.utils.response import (
 from app.utils.cache_utils import cache, user_cache_key
 from app.utils.logger import get_logger, log_auth_event, log_cache_operation
 import json
-from app.utils.logger import log_request
+from app.utils.decorators import log_request
 
 
 auth_bp = Blueprint('auth_bp', __name__, url_prefix='/api/auth')
