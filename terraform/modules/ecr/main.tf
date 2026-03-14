@@ -5,6 +5,7 @@
 resource "aws_ecr_repository" "app" {
   name                 = "${var.project_name}-${var.environment}"
   image_tag_mutability = var.image_tag_mutability
+  force_delete         = var.force_delete  # ← ADD THIS LINE
 
   image_scanning_configuration {
     scan_on_push = true

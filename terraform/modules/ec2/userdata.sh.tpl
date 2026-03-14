@@ -14,10 +14,14 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 echo "[$(date)] ▶ Starting Task Management System bootstrap"
 
 # ── System Updates ─────────────────────────────────────────────────────────────
-apt-get update -y
 apt-get install -y --no-install-recommends \
   ca-certificates curl gnupg lsb-release \
-  jq unzip awscli
+  jq unzip python3-pip
+
+# Install AWS CLI v2
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+unzip -q /tmp/awscliv2.zip -d /tmp/
+/tmp/aws/install
 
 # ── Docker Installation ────────────────────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
