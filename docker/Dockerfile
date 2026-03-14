@@ -18,7 +18,8 @@ COPY requirements/base.txt requirements/base.txt
 COPY requirements/production.txt requirements/production.txt
 
 # Install production Python dependencies
-RUN pip install --no-cache-dir -r requirements/production.txt
+# Install base + production dependencies
+RUN pip install --no-cache-dir -r requirements/base.txt -r requirements/production.txt
 
 # Copy the application code
 COPY . .
