@@ -1,6 +1,4 @@
-
-
-
+import os
 from .base import BaseConfig
 
 
@@ -8,11 +6,15 @@ class DevelopmentConfig(BaseConfig):
     """Development environment settings."""
 
     DEBUG = False
-    SQLALCHEMY_ECHO = False # Enables SQL query logging for debugging
+    SQLALCHEMY_ECHO = False
 
-    SQLALCHEMY_DATABASE_URI = 'postgresql://myuser:MySecurePassword123%21@dev-database.c1qe2o6s6oix.ap-south-1.rds.amazonaws.com:5432/myapp?sslmode=require'
+    # Falls back to the hardcoded dev DB if DATABASE_URL is not set locally.
+    # Set DATABASE_URL in your env/.env.dev file to override.
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        'DATABASE_URL',
+        'postgresql://myuser:MySecurePassword123%21@dev-database.c1qe2o6s6oix.ap-south-1.rds.amazonaws.com:5432/myapp?sslmode=require',
+    )
 
-    # ✅ ADD DEVELOPMENT CACHE SETTINGS
     # Cache settings for development
     CACHE_TYPE = 'RedisCache'
     CACHE_REDIS_URL = 'redis://localhost:6379/1'  # Use DB 1 for dev

@@ -7,12 +7,15 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from flask_migrate import Migrate
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 
 # Initialize extensions
 db = SQLAlchemy()
 jwt = JWTManager()
 migrate = Migrate()
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 def create_app(config_class):
     """Create Flask application instance"""
@@ -22,11 +25,10 @@ def create_app(config_class):
     app.config.from_object(config_class)
     config_class.init_app(app)
     
-    # ✅ SETUP LOGGING FIRST (before anything else)
+    # Setup logging first (before anything else)
     from app.utils.logger import setup_logging
     setup_logging(app)
     app.logger.info("🚀 Starting Task Management System")
-
 
     # Initialize extensions
     db.init_app(app)
@@ -34,34 +36,35 @@ def create_app(config_class):
     migrate.init_app(app, db)
     app.logger.info("✅ Database extensions initialized")
 
-    # ✅ ADD CACHE INITIALIZATION
+    # Initialize rate limiter
+    if app.config.get('RATELIMIT_ENABLED', True):
+        limiter.storage_uri = app.config.get(
+            'RATELIMIT_STORAGE_URL', 'memory://'
+        )
+    else:
+        limiter.storage_uri = 'memory://'
+    limiter.init_app(app)
+    app.logger.info("✅ Rate limiter initialized")
+
     # Initialize caching
     from app.utils.cache_utils import init_cache
     cache = init_cache(app)
     app.cache = cache
     app.logger.info("✅ Cache extension initialized")
-    # print(f"✅ Cache initialized: {app.config.get('CACHE_TYPE')}")
     
-    # Configure CORS
-    # CORS(app, resources={
-    #     r"/api/*": {
-    #         "origins": "*",
-    #         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    #         "allow_headers": ["Content-Type", "Authorization"]
-    #     }
-    # })
+    # Configure CORS for the Angular dev server
     CORS(
-    app,
-    resources={r"/api/*": {"origins": "http://localhost:4200"}},  # Angular dev server
-    supports_credentials=True
+        app,
+        resources={r"/api/*": {"origins": "http://localhost:4200"}},
+        supports_credentials=True
     )
     
-    # Initialize Socket.IO if enabled
-    # NEW - Import from utils instead of services
+    # Initialize Socket.IO
     from app.utils.socket_utils import init_socketio
     socketio = init_socketio(app)
     app.socketio = socketio
     app.logger.info("✅ Socket.IO initialized")
+
     # Import and register models
     from app import models
     
@@ -69,28 +72,30 @@ def create_app(config_class):
     from app.routes import register_blueprints
     register_blueprints(app)
     app.logger.info("✅ Blueprints registered")
-    # print("\n🔍 Registered Routes:")
+
     for rule in app.url_map.iter_rules():
         if rule.endpoint != 'static':
             methods = ', '.join(sorted(rule.methods - {'HEAD', 'OPTIONS'}))
             app.logger.debug(f"  {methods:15} {rule.rule}")
-            # print(f"  {methods:15} {rule.rule}")
-    print()
     
-    
-    # Register basic error handlers inline (temporary)
+    # Register error handlers
     register_basic_error_handlers(app)
     
     return app
 
 def register_basic_error_handlers(app):
-    """Register basic error handlers inline"""
+    """Register basic error handlers"""
     
     @app.errorhandler(404)
     def not_found(error):
         app.logger.warning(f"404 Error: {error}")
         return {'error': 'Resource not found'}, 404
     
+    @app.errorhandler(429)
+    def rate_limit_exceeded(error):
+        app.logger.warning(f"Rate limit exceeded: {error}")
+        return {'error': 'Too many requests. Please try again later.'}, 429
+
     @app.errorhandler(500)
     def internal_error(error):
         db.session.rollback()
@@ -103,5 +108,6 @@ def register_basic_error_handlers(app):
         db.session.rollback()
         app.logger.error(f"Unhandled exception: {e}", exc_info=True)
         if app.config.get('DEBUG'):
-            raise e  # Re-raise in debug mode
+            raise e
         return {'error': 'An unexpected error occurred'}, 500
+

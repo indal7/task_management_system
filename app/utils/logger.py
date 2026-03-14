@@ -162,23 +162,3 @@ def log_auth_event(event, user_id=None, email=None, success=True):
     status = "SUCCESS" if success else "FAILED"
     logger.info(f"🔐 {event} {status} | User: {user_id} | Email: {email}")
 
-
-
-from functools import wraps
-from flask import request, current_app as app
-from .logger import get_logger
-
-def log_request(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        logger = get_logger('api')
-        endpoint = request.path
-        method = request.method
-        user_ip = request.remote_addr
-        data = request.get_json(silent=True)
-        email = data.get('email') if data else None
-
-        logger.info(f"API called | Endpoint: {endpoint} | Method: {method} | Email: {email} | IP: {user_ip}")
-
-        return func(*args, **kwargs)
-    return wrapper

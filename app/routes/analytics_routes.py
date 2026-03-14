@@ -6,7 +6,8 @@ from app.utils.response import (
     success_response, error_response, server_error_response
 )
 from app.utils.cache_utils import cache
-from app.utils.logger import get_logger, log_request, log_cache_operation
+from app.utils.logger import get_logger, log_cache_operation
+from app.utils.decorators import log_request
 
 analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')
 logger = get_logger('analytics')

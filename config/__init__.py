@@ -4,19 +4,17 @@ Configuration module for Task Management System
 
 from .base import BaseConfig
 from .dev import DevelopmentConfig
-# from .staging import StagingConfig
-# from .production import ProductionConfig
-# from .testing import TestingConfig
+from .testing import TestingConfig
+from .production import ProductionConfig
 
 # Configuration mapping
 configs = {
     'development': DevelopmentConfig,
     'dev': DevelopmentConfig,
-    # 'staging': StagingConfig,
-    # 'production': ProductionConfig,
-    # 'prod': ProductionConfig,
-    # 'testing': TestingConfig,
-    # 'test': TestingConfig,
+    'testing': TestingConfig,
+    'test': TestingConfig,
+    'production': ProductionConfig,
+    'prod': ProductionConfig,
 }
 
 def get_config(config_name='development'):
@@ -25,9 +23,8 @@ def get_config(config_name='development'):
 
 __all__ = [
     'BaseConfig',
-    'DevelopmentConfig', 
-    # 'StagingConfig',
-    # 'ProductionConfig',
-    # 'TestingConfig',
-    # 'get_config'
+    'DevelopmentConfig',
+    'TestingConfig',
+    'ProductionConfig',
+    'get_config',
 ]

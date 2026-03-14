@@ -1,4 +1,5 @@
 # app/utils/database.py
+from sqlalchemy import text
 from app import db
 
 def init_database():
@@ -7,10 +8,6 @@ def init_database():
 
 def test_connection():
     try:
-        # Change this line:
-        db.session.execute("SELECT 1")
-        # To this:
-        from sqlalchemy import text
         db.session.execute(text("SELECT 1"))
         return True
     except Exception as e:

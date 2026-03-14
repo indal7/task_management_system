@@ -2,11 +2,11 @@
 Cache management routes (for development/admin)
 """
 from flask import Blueprint
+from flask_jwt_extended import jwt_required
 from app.utils.cache_utils import cache
 from app.utils.decorators import admin_required
-from flask_jwt_extended import jwt_required
 
-cache_bp = Blueprint('cache', __name__)
+cache_bp = Blueprint('cache', __name__, url_prefix='/api/cache')
 
 @cache_bp.route('/clear', methods=['POST'])
 @jwt_required()
@@ -17,12 +17,11 @@ def clear_cache():
     return {'success': True, 'message': 'Cache cleared successfully'}
 
 @cache_bp.route('/stats', methods=['GET'])
-@jwt_required() 
+@jwt_required()
 @admin_required
 def cache_stats():
     """Get cache statistics"""
     try:
-        # This works with Redis
         info = cache.cache._write_client.info()
         return {
             'success': True,

@@ -1,0 +1,58 @@
+# ==============================================================================
+# Example variable values – copy to terraform.tfvars and fill in sensitive fields
+# DO NOT commit terraform.tfvars with real secrets to version control.
+# ==============================================================================
+
+project_name = "taskmanager"
+environment  = "dev"
+aws_region   = "ap-south-1"
+
+# ── Networking ─────────────────────────────────────────────────────────────────
+vpc_cidr             = "10.0.0.0/16"
+public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.11.0/24", "10.0.12.0/24"]
+availability_zones   = ["ap-south-1a", "ap-south-1b"]
+enable_nat_gateway   = true
+
+# ── EC2 ────────────────────────────────────────────────────────────────────────
+# Ubuntu 22.04 LTS HVM x86_64
+# ⚠️  AMI IDs are REGION-SPECIFIC. This ID is for ap-south-1 (Mumbai) only.
+# For other regions find the right ID at: https://cloud-images.ubuntu.com/locator/ec2/
+ec2_ami_id          = "ami-0f58b397bc5c1f2e8"
+ec2_instance_type   = "t3.small"
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+
+# Restrict in production!  e.g. "203.0.113.10/32"
+admin_cidr = "0.0.0.0/0"
+
+flask_port              = 5000
+ec2_root_volume_size_gb = 20
+
+# ── RDS – PostgreSQL ───────────────────────────────────────────────────────────
+rds_engine_version           = "14.17"
+rds_instance_class           = "db.t3.micro"
+rds_allocated_storage_gb     = 20
+rds_max_allocated_storage_gb = 100
+rds_db_name                  = "taskmanager"
+rds_username                 = "taskmanager_user"
+rds_backup_retention_days    = 7
+rds_multi_az                 = false
+rds_deletion_protection      = false
+rds_skip_final_snapshot      = true   # set to false in production
+
+# ── ElastiCache – Redis ────────────────────────────────────────────────────────
+redis_node_type       = "cache.t3.micro"
+redis_engine_version  = "7.1"
+redis_num_cache_nodes = 1
+redis_port            = 6379
+
+# ── ECR ────────────────────────────────────────────────────────────────────────
+ecr_image_tag_mutability = "MUTABLE"
+ecr_max_image_count      = 10
+
+# ── Secrets (SENSITIVE – never commit real values) ─────────────────────────────
+# Replace with strong random values before applying.
+# You can generate them with:
+#   python -c "import secrets; print(secrets.token_hex(32))"
+app_secret_key     = "REPLACE_WITH_A_STRONG_RANDOM_SECRET"
+app_jwt_secret_key = "REPLACE_WITH_A_DIFFERENT_STRONG_SECRET"

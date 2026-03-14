@@ -10,7 +10,8 @@ from app.utils.response import (
 
 comment_bp = Blueprint('comment', __name__, url_prefix='/api/tasks')
 
-from app.utils.logger import get_logger, log_request, log_cache_operation
+from app.utils.logger import get_logger, log_cache_operation
+from app.utils.decorators import log_request
 
 logger = get_logger('tasks')  # Or 'comments', if you prefer a separate logger
 

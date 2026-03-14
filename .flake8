@@ -1,0 +1,44 @@
+[flake8]
+# Maximum line length
+max-line-length = 120
+
+# Ignore pre-existing style issues that are widespread in the codebase.
+# Only F821 (undefined name) is left unignored as a true blocking bug check.
+extend-ignore =
+    # Line length / whitespace (enforced by max-line-length above)
+    E501,W503,W504,
+    # Blank lines (pre-existing across model/route files)
+    E302,E303,E305,
+    # Trailing / superfluous whitespace
+    W291,W293,W391,W292,
+    # Import ordering (legacy route files load imports mid-file)
+    E402,
+    # Unused imports and redefinitions (many pre-existing dead imports)
+    F401,F811,
+    # Local variable assigned but never used (pre-existing in services)
+    F841,
+    # Continuation line indentation (pre-existing in models)
+    E128,
+    # Missing whitespace around arithmetic (pre-existing in scripts)
+    E226,
+    # Unexpected indentation (comment) in scripts
+    E116,
+    # Do not assign a lambda expression (pre-existing in scripts)
+    E731,
+    # Comparison to False (pre-existing)
+    E712,
+    # f-string without placeholders (pre-existing in analytics_service)
+    F541
+
+# Directories to exclude (scripts are utility tools, not production code)
+exclude =
+    .git,
+    __pycache__,
+    migrations,
+    scripts,
+    .venv,
+    venv,
+    .eggs,
+    *.egg-info,
+    build,
+    dist
