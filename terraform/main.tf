@@ -83,6 +83,8 @@ module "rds" {
   deletion_protection      = var.rds_deletion_protection
   skip_final_snapshot      = var.rds_skip_final_snapshot
   db_password_secret_arn   = module.secrets.db_password_secret_arn
+
+  depends_on = [module.secrets]
 }
 
 # ── ElastiCache – Redis ────────────────────────────────────────────────────────
