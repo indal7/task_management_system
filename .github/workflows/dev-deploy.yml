@@ -1,21 +1,10 @@
 name: Dev Deploy
 
-# Triggers automatically on every push to the develop branch.
-# No manual approval needed – fast iteration loop for development.
-#
-# Required GitHub Secrets (Settings → Secrets and variables → Actions):
-#   AWS_ACCESS_KEY_ID       – IAM user access key with ECR + describe-instances perms
-#   AWS_SECRET_ACCESS_KEY   – Matching secret key
-#   AWS_REGION              – e.g. ap-south-1 (defaults to ap-south-1 if omitted)
-#   EC2_HOST_DEV            – Public IP / hostname of the dev EC2 instance
-#   EC2_KEY_DEV             – Private SSH key to reach the dev EC2 instance
-
 on:
   push:
     branches: [ master ]
 
 jobs:
-  # ── Build & Push Docker image to ECR (dev) ──────────────────────────────────
   build-and-push:
     name: Build & Push to ECR (dev)
     runs-on: ubuntu-latest
@@ -60,7 +49,6 @@ jobs:
         docker push "$ECR_URI:latest"
         echo "✅ Pushed $ECR_URI:$IMAGE_TAG"
 
-  # ── Deploy to DEV EC2 ───────────────────────────────────────────────────────
   deploy:
     name: Deploy to DEV EC2
     runs-on: ubuntu-latest
@@ -103,27 +91,27 @@ jobs:
           mkdir -p /home/ubuntu/taskmanager/env
           
           cat > /home/ubuntu/taskmanager/env/.env.dev <<'ENVEOF'
-          FLASK_ENV=development
-          FLASK_HOST=0.0.0.0
-          FLASK_PORT=5000
-          FLASK_DEBUG=true
+            FLASK_ENV=development
+            FLASK_HOST=0.0.0.0
+            FLASK_PORT=5000
+            FLASK_DEBUG=true
 
-          REDIS_HOST=redis
-          REDIS_PORT=6379
-          REDIS_URL=redis://redis:6379/0
-          CACHE_REDIS_URL=redis://redis:6379/1
-          CACHE_TYPE=RedisCache
-          CACHE_DEFAULT_TIMEOUT=300
+            REDIS_HOST=redis
+            REDIS_PORT=6379
+            REDIS_URL=redis://redis:6379/0
+            CACHE_REDIS_URL=redis://redis:6379/1
+            CACHE_TYPE=RedisCache
+            CACHE_DEFAULT_TIMEOUT=300
 
-          SECRET_KEY=dev-secret-key-change-in-production
-          JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
-          JWT_ACCESS_TOKEN_EXPIRES=3600
+            SECRET_KEY=dev-secret-key-change-in-production
+            JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
+            JWT_ACCESS_TOKEN_EXPIRES=3600
 
-          LOG_LEVEL=DEBUG
-          LOG_TO_STDOUT=true
+            LOG_LEVEL=DEBUG
+            LOG_TO_STDOUT=true
 
-          RATELIMIT_ENABLED=false
-          ENVEOF
+            RATELIMIT_ENABLED=false
+            ENVEOF
 
           chmod 600 /home/ubuntu/taskmanager/env/.env.dev
           echo "✅ .env.dev created successfully"
@@ -133,25 +121,49 @@ jobs:
       env:
         IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
         AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}              # ✅ ADD THIS
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}      # ✅ ADD THIS
         ECR_REPOSITORY: taskmanager-dev
+        EC2_HOST: ${{ secrets.EC2_HOST_DEV }}
       run: |
-        ssh -T -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST_DEV }} << 'ENDSSH'
+        ssh -T -i ~/.ssh/github-actions-key.pem ubuntu@$EC2_HOST << 'ENDSSH'
           set -e
+          
+          # ✅ Export AWS credentials for AWS CLI to use
+          export AWS_ACCESS_KEY_ID
+          export AWS_SECRET_ACCESS_KEY
+          export AWS_REGION
+          
+          echo "🔍 Testing AWS credentials..."
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          if [ -z "$ACCOUNT_ID" ]; then
+            echo "❌ Failed to retrieve AWS Account ID - credentials invalid?"
+            exit 1
+          fi
+          echo "✅ AWS Account ID retrieved: $ACCOUNT_ID"
+          
           ECR_REGISTRY="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
           ECR_URI="$ECR_REGISTRY/$ECR_REPOSITORY"
+          
+          echo "📦 ECR URI: $ECR_URI"
 
+          echo "🔐 Authenticating Docker with ECR..."
           aws ecr get-login-password --region $AWS_REGION | \
             docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
+          echo "📥 Pulling latest image: $ECR_URI:latest"
           docker pull "$ECR_URI:latest"
-          export ECR_IMAGE="$ECR_URI"
           
+          echo "📂 Navigating to /home/ubuntu/taskmanager"
           cd /home/ubuntu/taskmanager
-          docker compose -f docker-compose.dev.yml \
-            up -d --remove-orphans
           
+          echo "🚀 Starting Docker containers..."
+          docker compose -f docker-compose.dev.yml up -d --remove-orphans
+          
+          echo "⏳ Waiting for containers to start (15 seconds)..."
           sleep 15
+          
+          echo "📋 Running containers:"
           docker ps
         ENDSSH
 
@@ -160,16 +172,19 @@ jobs:
         ssh -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST_DEV }} << 'EOF'
           if docker ps | grep -q "taskmanager_app_dev"; then
             echo "✅ Flask dev container is running"
+            echo "📋 Last 20 lines of logs:"
             docker logs taskmanager_app_dev --tail=20
             sleep 5
             if curl -f --max-time 10 http://localhost:5000/health > /dev/null 2>&1; then
-              echo "✅ App is responding on port 5000"
+              echo "✅ App is responding on port 5000 ✓"
             else
               echo "⚠️  App may not be responding yet – check logs above"
             fi
           else
             echo "❌ Deployment failed – container not running"
+            echo "📋 All containers:"
             docker ps -a
+            echo "📋 App logs:"
             docker logs taskmanager_app_dev --tail=50 || true
             exit 1
           fi
@@ -177,7 +192,17 @@ jobs:
 
     - name: Notify DEV Deployment Success
       run: |
-        echo "🚀 DEV deployment successful!"
-        echo "App:    http://${{ secrets.EC2_HOST_DEV }}:5000"
-        echo "Health: http://${{ secrets.EC2_HOST_DEV }}:5000/health"
-        echo "Image tag: ${{ needs.build-and-push.outputs.image_tag }}"
+        echo "🎉 ═══════════════════════════════════════════════════════════"
+        echo "🚀 DEV DEPLOYMENT SUCCESSFUL!"
+        echo "🎉 ═══════════════════════════════════════════════════════════"
+        echo ""
+        echo "📱 Application URLs:"
+        echo "   App:    http://${{ secrets.EC2_HOST_DEV }}:5000"
+        echo "   Health: http://${{ secrets.EC2_HOST_DEV }}:5000/health"
+        echo ""
+        echo "📦 Image Details:"
+        echo "   Image tag: ${{ needs.build-and-push.outputs.image_tag }}"
+        echo "   Repository: taskmanager-dev"
+        echo ""
+        echo "📊 Environment: Development"
+        echo "🎉 ═══════════════════════════════════════════════════════════"
