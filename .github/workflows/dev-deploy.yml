@@ -2,7 +2,7 @@ name: Dev Deploy
 
 on:
   push:
-    branches: [ master ]
+    branches: [ develop ]
 
 jobs:
   build-and-push:
@@ -90,28 +90,28 @@ jobs:
           set -e
           mkdir -p /home/ubuntu/taskmanager/env
           
-          cat > /home/ubuntu/taskmanager/env/.env.dev <<'ENVEOF'
-            FLASK_ENV=development
-            FLASK_HOST=0.0.0.0
-            FLASK_PORT=5000
-            FLASK_DEBUG=true
+          cat > /home/ubuntu/taskmanager/env/.env.dev << 'ENVEOF'
+        FLASK_ENV=development
+        FLASK_HOST=0.0.0.0
+        FLASK_PORT=5000
+        FLASK_DEBUG=true
 
-            REDIS_HOST=redis
-            REDIS_PORT=6379
-            REDIS_URL=redis://redis:6379/0
-            CACHE_REDIS_URL=redis://redis:6379/1
-            CACHE_TYPE=RedisCache
-            CACHE_DEFAULT_TIMEOUT=300
+        REDIS_HOST=redis
+        REDIS_PORT=6379
+        REDIS_URL=redis://redis:6379/0
+        CACHE_REDIS_URL=redis://redis:6379/1
+        CACHE_TYPE=RedisCache
+        CACHE_DEFAULT_TIMEOUT=300
 
-            SECRET_KEY=dev-secret-key-change-in-production
-            JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
-            JWT_ACCESS_TOKEN_EXPIRES=3600
+        SECRET_KEY=dev-secret-key-change-in-production
+        JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
+        JWT_ACCESS_TOKEN_EXPIRES=3600
 
-            LOG_LEVEL=DEBUG
-            LOG_TO_STDOUT=true
+        LOG_LEVEL=DEBUG
+        LOG_TO_STDOUT=true
 
-            RATELIMIT_ENABLED=false
-            ENVEOF
+        RATELIMIT_ENABLED=false
+        ENVEOF
 
           chmod 600 /home/ubuntu/taskmanager/env/.env.dev
           echo "✅ .env.dev created successfully"
@@ -121,38 +121,43 @@ jobs:
       env:
         IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
         AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}              # ✅ ADD THIS
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}      # ✅ ADD THIS
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         ECR_REPOSITORY: taskmanager-dev
         EC2_HOST: ${{ secrets.EC2_HOST_DEV }}
       run: |
-        ssh -T -i ~/.ssh/github-actions-key.pem ubuntu@$EC2_HOST << 'ENDSSH'
+        # ✅ IMPORTANT: Use double quotes instead of single quotes!
+        ssh -T -i ~/.ssh/github-actions-key.pem ubuntu@$EC2_HOST << ENDSSH
           set -e
           
           # ✅ Export AWS credentials for AWS CLI to use
-          export AWS_ACCESS_KEY_ID
-          export AWS_SECRET_ACCESS_KEY
-          export AWS_REGION
+          export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+          export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+          export AWS_REGION="$AWS_REGION"
+          export ECR_REPOSITORY="$ECR_REPOSITORY"
           
           echo "🔍 Testing AWS credentials..."
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          if [ -z "$ACCOUNT_ID" ]; then
+          echo "   AWS_REGION: \$AWS_REGION"
+          echo "   ECR_REPOSITORY: \$ECR_REPOSITORY"
+          
+          ACCOUNT_ID=\$(aws sts get-caller-identity --query Account --output text)
+          if [ -z "\$ACCOUNT_ID" ]; then
             echo "❌ Failed to retrieve AWS Account ID - credentials invalid?"
             exit 1
           fi
-          echo "✅ AWS Account ID retrieved: $ACCOUNT_ID"
+          echo "✅ AWS Account ID retrieved: \$ACCOUNT_ID"
           
-          ECR_REGISTRY="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-          ECR_URI="$ECR_REGISTRY/$ECR_REPOSITORY"
+          ECR_REGISTRY="\$ACCOUNT_ID.dkr.ecr.\$AWS_REGION.amazonaws.com"
+          ECR_URI="\$ECR_REGISTRY/\$ECR_REPOSITORY"
           
-          echo "📦 ECR URI: $ECR_URI"
+          echo "📦 ECR URI: \$ECR_URI"
 
           echo "🔐 Authenticating Docker with ECR..."
-          aws ecr get-login-password --region $AWS_REGION | \
-            docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          aws ecr get-login-password --region \$AWS_REGION | \
+            docker login --username AWS --password-stdin "\$ECR_REGISTRY"
 
-          echo "📥 Pulling latest image: $ECR_URI:latest"
-          docker pull "$ECR_URI:latest"
+          echo "📥 Pulling latest image: \$ECR_URI:latest"
+          docker pull "\$ECR_URI:latest"
           
           echo "📂 Navigating to /home/ubuntu/taskmanager"
           cd /home/ubuntu/taskmanager
