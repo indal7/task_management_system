@@ -1,8 +1,16 @@
-name: Deploy Flask to EC2
+# ==============================================================================
+# DEPRECATED – this workflow has been superseded by separate dev/prod pipelines.
+#
+#   dev-deploy.yml  – auto-deploys on every push to the `develop` branch
+#   prod-deploy.yml – deploys on push to `master` with a mandatory approval gate
+#
+# This file is kept for reference only and will not trigger on any branch.
+# ==============================================================================
+name: Deploy Flask to EC2 (deprecated)
 
 on:
   push:
-    branches: [ master ]   # Trigger when pushing to master branch
+    branches: [ __disabled__ ]   # disabled – use dev-deploy.yml or prod-deploy.yml
 
 jobs:
   # ── Build & Push Docker image to ECR ────────────────────────────────────────
