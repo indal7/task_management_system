@@ -52,11 +52,23 @@ def create_app(config_class):
     app.cache = cache
     app.logger.info("✅ Cache extension initialized")
     
-    # Configure CORS for the Angular dev server
+    # Configure CORS using origins defined in the active config.
+    # In development this covers any localhost port; in production it is
+    # driven by the CORS_ORIGINS environment variable.
+    cors_origins = app.config.get('CORS_ORIGINS') or ['http://localhost:4200']
     CORS(
         app,
-        resources={r"/api/*": {"origins": "http://localhost:4200"}},
-        supports_credentials=True
+        resources={r"/api/*": {"origins": cors_origins}},
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-Requested-With",
+            "X-Client-Version",
+            "Accept",
+        ],
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        supports_credentials=True,
+        max_age=600,
     )
     
     # Initialize Socket.IO
