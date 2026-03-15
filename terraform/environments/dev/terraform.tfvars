@@ -46,5 +46,6 @@ ecr_max_image_count      = 10
 
 # ── Secrets (SENSITIVE – never commit real values) ─────────────────────────────
 # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
-app_secret_key     = "REPLACE_WITH_A_STRONG_RANDOM_SECRET"
-app_jwt_secret_key = "REPLACE_WITH_A_DIFFERENT_STRONG_SECRET"
+
+app_secret_key     = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6"
+app_jwt_secret_key = "z9y8x7w6v5u4t3s2r1q0p9o8n7m6l5k4j3i2h1g0f9e8d7c6b5a4"
