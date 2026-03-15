@@ -132,6 +132,7 @@ dmypy.json
 *.db
 migrations/versions/*
 !migrations/versions/.gitkeep
+!migrations/versions/*.py
 
 # Environment variables
 .env.local
