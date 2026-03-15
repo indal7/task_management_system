@@ -15,6 +15,7 @@ jobs:
 
     outputs:
       image_tag: ${{ steps.image_tag.outputs.tag }}
+      ecr_uri: ${{ steps.ecr_uri.outputs.uri }}
 
     steps:
     - name: Checkout Code
@@ -35,19 +36,25 @@ jobs:
       id: image_tag
       run: echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-    - name: Build, tag, and push image to ECR
+    - name: Resolve ECR URI
+      id: ecr_uri
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'taskmanager-dev' }}
+      run: echo "uri=$ECR_REGISTRY/$ECR_REPOSITORY" >> "$GITHUB_OUTPUT"
+
+    - name: Build, tag, and push image to ECR
+      env:
+        ECR_URI: ${{ steps.ecr_uri.outputs.uri }}
         IMAGE_TAG: ${{ steps.image_tag.outputs.tag }}
       run: |
         docker build -f docker/Dockerfile \
-          -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
-          -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" \
+          -t "$ECR_URI:$IMAGE_TAG" \
+          -t "$ECR_URI:latest" \
           .
-        docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-        docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
-        echo "✅ Pushed $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+        docker push "$ECR_URI:$IMAGE_TAG"
+        docker push "$ECR_URI:latest"
+        echo "✅ Pushed $ECR_URI:$IMAGE_TAG"
 
   # ── Deploy to EC2 ──────────────────────────────────────────────────────────
   deploy:
@@ -78,9 +85,18 @@ jobs:
             ubuntu@${{ secrets.EC2_HOST }} \
             "echo '✅ SSH connection successful - $(date)'"
 
+    - name: Copy prod docker-compose file to EC2
+      run: |
+        scp -i ~/.ssh/github-actions-key.pem \
+            -o StrictHostKeyChecking=no \
+            docker/docker-compose.prod.yml \
+            ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/taskmanager/docker-compose.prod.yml
+        echo "✅ docker-compose.prod.yml copied to EC2"
+
     - name: Pull latest image and restart containers on EC2
       env:
         IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+        ECR_URI: ${{ needs.build-and-push.outputs.ecr_uri }}
         AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'taskmanager-dev' }}
         EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -91,44 +107,28 @@ jobs:
           # Authenticate Docker with ECR
           aws ecr get-login-password --region $AWS_REGION | \
             docker login --username AWS --password-stdin \
-            \$(aws ecr describe-repositories \
-              --repository-names $ECR_REPOSITORY \
-              --region $AWS_REGION \
-              --query 'repositories[0].repositoryUri' \
-              --output text | cut -d/ -f1)
+            \$(echo "$ECR_URI" | cut -d/ -f1)
 
           # Pull the new image
-          ECR_URI=\$(aws ecr describe-repositories \
-            --repository-names $ECR_REPOSITORY \
-            --region $AWS_REGION \
-            --query 'repositories[0].repositoryUri' \
-            --output text)
+          docker pull $ECR_URI:latest
 
-          docker pull \$ECR_URI:latest
+          # Ensure the taskmanager directory exists
+          mkdir -p /home/ubuntu/taskmanager/env
 
-          # Restart with Docker Compose
-          if [ -f /home/ubuntu/taskmanager/docker-compose.prod.yml ]; then
-            docker compose -f /home/ubuntu/taskmanager/docker-compose.prod.yml \
-              up -d --remove-orphans
-          else
-            docker stop taskmanager_app 2>/dev/null || true
-            docker rm   taskmanager_app 2>/dev/null || true
-            docker run -d \
-              --name taskmanager_app \
-              --restart unless-stopped \
-              --env-file /home/ubuntu/taskmanager/env/.env.prod \
-              -p 5000:5000 \
-              \$ECR_URI:latest
-          fi
+          # Bring up the stack using the prod compose file
+          # ECR_IMAGE is exported so docker-compose.prod.yml can reference it
+          export ECR_IMAGE=$ECR_URI
+          docker compose -f /home/ubuntu/taskmanager/docker-compose.prod.yml \
+            up -d --remove-orphans
 
-          sleep 10
+          sleep 15
           docker ps
         ENDSSH
 
     - name: Verify Deployment
       run: |
         ssh -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-          if sudo docker ps | grep -q "taskmanager_app"; then
+          if docker ps | grep -q "taskmanager_app"; then
             echo "✅ Flask container is running"
             echo "📋 App logs (last 20 lines):"
             docker logs taskmanager_app --tail=20
