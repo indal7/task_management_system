@@ -9,6 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set working directory
 WORKDIR /app
 
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev gcc python3-dev curl \
@@ -22,7 +23,7 @@ COPY requirements/dev.txt requirements/dev.txt
 RUN pip install --no-cache-dir -r requirements/base.txt -r requirements/dev.txt
 
 # Copy the application code (overridden by volume mount in compose)
-COPY . .
+COPY . /app
 
 # Expose port
 EXPOSE 5000
