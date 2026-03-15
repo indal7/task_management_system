@@ -12,7 +12,7 @@ name: Dev Deploy
 
 on:
   push:
-    branches: [ develop ]
+    branches: [ master ]
 
 jobs:
   # ── Build & Push Docker image to ECR (dev) ──────────────────────────────────
