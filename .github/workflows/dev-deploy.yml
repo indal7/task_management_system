@@ -2,7 +2,7 @@ name: Dev Deploy
 
 on:
   push:
-    branches: [ master ]
+    branches: [ develop ]
 
 jobs:
   build-and-push:
@@ -72,17 +72,19 @@ jobs:
             ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "echo '✅ SSH connection successful - $(date)'"
 
-    - name: Copy docker-compose.dev.yml to DEV EC2
+    - name: Copy source code to DEV EC2
       run: |
         ssh -i ~/.ssh/github-actions-key.pem \
             -o StrictHostKeyChecking=no \
             ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "sudo mkdir -p /home/ubuntu/taskmanager && sudo chown -R ubuntu:ubuntu /home/ubuntu/taskmanager"
+        
         scp -i ~/.ssh/github-actions-key.pem \
             -o StrictHostKeyChecking=no \
-            docker/docker-compose.dev.yml \
-            ubuntu@${{ secrets.EC2_HOST_DEV }}:/home/ubuntu/taskmanager/docker-compose.dev.yml
-        echo "✅ docker-compose.dev.yml copied to DEV EC2"
+            -r . \
+            ubuntu@${{ secrets.EC2_HOST_DEV }}:/home/ubuntu/taskmanager/
+        
+        echo "✅ Source code copied to DEV EC2"
 
     - name: Create .env.dev file on DEV EC2
       run: |
@@ -126,37 +128,26 @@ jobs:
         ECR_REPOSITORY: taskmanager-dev
         EC2_HOST: ${{ secrets.EC2_HOST_DEV }}
       run: |
-        # ✅ IMPORTANT: Use double quotes instead of single quotes!
         ssh -T -i ~/.ssh/github-actions-key.pem ubuntu@$EC2_HOST << ENDSSH
           set -e
           
-          # ✅ Export AWS credentials for AWS CLI to use
           export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
           export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
           export AWS_REGION="$AWS_REGION"
           export ECR_REPOSITORY="$ECR_REPOSITORY"
           
           echo "🔍 Testing AWS credentials..."
-          echo "   AWS_REGION: \$AWS_REGION"
-          echo "   ECR_REPOSITORY: \$ECR_REPOSITORY"
-          
           ACCOUNT_ID=\$(aws sts get-caller-identity --query Account --output text)
-          if [ -z "\$ACCOUNT_ID" ]; then
-            echo "❌ Failed to retrieve AWS Account ID - credentials invalid?"
-            exit 1
-          fi
           echo "✅ AWS Account ID retrieved: \$ACCOUNT_ID"
           
           ECR_REGISTRY="\$ACCOUNT_ID.dkr.ecr.\$AWS_REGION.amazonaws.com"
           ECR_URI="\$ECR_REGISTRY/\$ECR_REPOSITORY"
-          
-          echo "📦 ECR URI: \$ECR_URI"
 
           echo "🔐 Authenticating Docker with ECR..."
           aws ecr get-login-password --region \$AWS_REGION | \
             docker login --username AWS --password-stdin "\$ECR_REGISTRY"
 
-          echo "📥 Pulling latest image: \$ECR_URI:latest"
+          echo "📥 Pulling latest image..."
           docker pull "\$ECR_URI:latest"
           
           echo "📂 Navigating to /home/ubuntu/taskmanager"
@@ -165,10 +156,7 @@ jobs:
           echo "🚀 Starting Docker containers..."
           docker compose -f docker-compose.dev.yml up -d --remove-orphans
           
-          echo "⏳ Waiting for containers to start (15 seconds)..."
           sleep 15
-          
-          echo "📋 Running containers:"
           docker ps
         ENDSSH
 
@@ -177,37 +165,22 @@ jobs:
         ssh -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST_DEV }} << 'EOF'
           if docker ps | grep -q "taskmanager_app_dev"; then
             echo "✅ Flask dev container is running"
-            echo "📋 Last 20 lines of logs:"
             docker logs taskmanager_app_dev --tail=20
             sleep 5
             if curl -f --max-time 10 http://localhost:5000/health > /dev/null 2>&1; then
               echo "✅ App is responding on port 5000 ✓"
             else
-              echo "⚠️  App may not be responding yet – check logs above"
+              echo "⚠️  App may not be responding yet"
             fi
           else
-            echo "❌ Deployment failed – container not running"
-            echo "📋 All containers:"
+            echo "❌ Deployment failed"
             docker ps -a
-            echo "📋 App logs:"
-            docker logs taskmanager_app_dev --tail=50 || true
             exit 1
           fi
         EOF
 
     - name: Notify DEV Deployment Success
       run: |
-        echo "🎉 ═══════════════════════════════════════════════════════════"
-        echo "🚀 DEV DEPLOYMENT SUCCESSFUL!"
-        echo "🎉 ═══════════════════════════════════════════════════════════"
-        echo ""
-        echo "📱 Application URLs:"
-        echo "   App:    http://${{ secrets.EC2_HOST_DEV }}:5000"
-        echo "   Health: http://${{ secrets.EC2_HOST_DEV }}:5000/health"
-        echo ""
-        echo "📦 Image Details:"
-        echo "   Image tag: ${{ needs.build-and-push.outputs.image_tag }}"
-        echo "   Repository: taskmanager-dev"
-        echo ""
-        echo "📊 Environment: Development"
-        echo "🎉 ═══════════════════════════════════════════════════════════"
+        echo "🎉 DEV DEPLOYMENT SUCCESSFUL!"
+        echo "App:    http://${{ secrets.EC2_HOST_DEV }}:5000"
+        echo "Health: http://${{ secrets.EC2_HOST_DEV }}:5000/health"

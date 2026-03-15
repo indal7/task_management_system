@@ -1,8 +1,5 @@
 version: '3.8'
 
-# Development docker-compose – builds locally, mounts source for live reload.
-# Usage: docker compose -f docker/docker-compose.dev.yml up
-
 services:
   app:
     build:
@@ -19,7 +16,7 @@ services:
     env_file:
       - ./env/.env.dev
     volumes:
-      - ..:/app          # Live-reload: source changes reflected immediately
+      - .:/app
     ports:
       - "5000:5000"
     depends_on:
