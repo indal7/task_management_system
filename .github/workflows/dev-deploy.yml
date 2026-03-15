@@ -6,13 +6,13 @@ name: Dev Deploy
 # Required GitHub Secrets (Settings → Secrets and variables → Actions):
 #   AWS_ACCESS_KEY_ID       – IAM user access key with ECR + describe-instances perms
 #   AWS_SECRET_ACCESS_KEY   – Matching secret key
-#   AWS_REGION              – e.g. ap-south-1  (defaults to ap-south-1 if omitted)
+#   AWS_REGION              – e.g. ap-south-1 (defaults to ap-south-1 if omitted)
 #   EC2_HOST_DEV            – Public IP / hostname of the dev EC2 instance
 #   EC2_KEY_DEV             – Private SSH key to reach the dev EC2 instance
 
 on:
   push:
-    branches: [ master ]
+    branches: [ develop ]
 
 jobs:
   # ── Build & Push Docker image to ECR (dev) ──────────────────────────────────
@@ -84,7 +84,7 @@ jobs:
             ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "echo '✅ SSH connection successful - $(date)'"
 
-    - name: Copy docker-compose file to DEV EC2
+    - name: Copy docker-compose.dev.yml to DEV EC2
       run: |
         ssh -i ~/.ssh/github-actions-key.pem \
             -o StrictHostKeyChecking=no \
@@ -96,26 +96,61 @@ jobs:
             ubuntu@${{ secrets.EC2_HOST_DEV }}:/home/ubuntu/taskmanager/docker-compose.dev.yml
         echo "✅ docker-compose.dev.yml copied to DEV EC2"
 
+    - name: Create .env.dev file on DEV EC2
+      run: |
+        ssh -T -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST_DEV }} << 'ENDSSH'
+          set -e
+          mkdir -p /home/ubuntu/taskmanager/env
+          
+          cat > /home/ubuntu/taskmanager/env/.env.dev <<'ENVEOF'
+          FLASK_ENV=development
+          FLASK_HOST=0.0.0.0
+          FLASK_PORT=5000
+          FLASK_DEBUG=true
+
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          REDIS_URL=redis://redis:6379/0
+          CACHE_REDIS_URL=redis://redis:6379/1
+          CACHE_TYPE=RedisCache
+          CACHE_DEFAULT_TIMEOUT=300
+
+          SECRET_KEY=dev-secret-key-change-in-production
+          JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
+          JWT_ACCESS_TOKEN_EXPIRES=3600
+
+          LOG_LEVEL=DEBUG
+          LOG_TO_STDOUT=true
+
+          RATELIMIT_ENABLED=false
+          ENVEOF
+
+          chmod 600 /home/ubuntu/taskmanager/env/.env.dev
+          echo "✅ .env.dev created successfully"
+        ENDSSH
+
     - name: Pull latest image and restart containers on DEV EC2
       env:
         IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
         AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
         ECR_REPOSITORY: taskmanager-dev
       run: |
-        ssh -T -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST_DEV }} << ENDSSH
+        ssh -T -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST_DEV }} << 'ENDSSH'
           set -e
-          ACCOUNT_ID=\$(aws sts get-caller-identity --query Account --output text)
-          ECR_REGISTRY="\$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-          ECR_URI="\$ECR_REGISTRY/$ECR_REPOSITORY"
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REGISTRY="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+          ECR_URI="$ECR_REGISTRY/$ECR_REPOSITORY"
 
           aws ecr get-login-password --region $AWS_REGION | \
-            docker login --username AWS --password-stdin "\$ECR_REGISTRY"
+            docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
-          docker pull "\$ECR_URI:latest"
-          mkdir -p /home/ubuntu/taskmanager/env
-          export ECR_IMAGE="\$ECR_URI"
-          docker compose -f /home/ubuntu/taskmanager/docker-compose.dev.yml \
+          docker pull "$ECR_URI:latest"
+          export ECR_IMAGE="$ECR_URI"
+          
+          cd /home/ubuntu/taskmanager
+          docker compose -f docker-compose.dev.yml \
             up -d --remove-orphans
+          
           sleep 15
           docker ps
         ENDSSH
@@ -123,9 +158,9 @@ jobs:
     - name: Verify DEV Deployment
       run: |
         ssh -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST_DEV }} << 'EOF'
-          if docker ps | grep -q "taskmanager_app"; then
-            echo "✅ Flask container is running on DEV"
-            docker logs taskmanager_app --tail=20
+          if docker ps | grep -q "taskmanager_app_dev"; then
+            echo "✅ Flask dev container is running"
+            docker logs taskmanager_app_dev --tail=20
             sleep 5
             if curl -f --max-time 10 http://localhost:5000/health > /dev/null 2>&1; then
               echo "✅ App is responding on port 5000"
@@ -135,7 +170,7 @@ jobs:
           else
             echo "❌ Deployment failed – container not running"
             docker ps -a
-            docker logs taskmanager_app --tail=50 || true
+            docker logs taskmanager_app_dev --tail=50 || true
             exit 1
           fi
         EOF
