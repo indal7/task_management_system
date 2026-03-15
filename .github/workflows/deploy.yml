@@ -87,11 +87,11 @@ jobs:
 
     - name: Copy prod docker-compose file to EC2
       run: |
-        # Ensure target directory exists before copying
+        # Ensure target directory exists and is writable before copying
         ssh -i ~/.ssh/github-actions-key.pem \
             -o StrictHostKeyChecking=no \
             ubuntu@${{ secrets.EC2_HOST }} \
-            "mkdir -p /home/ubuntu/taskmanager"
+            "sudo mkdir -p /home/ubuntu/taskmanager && sudo chown -R ubuntu:ubuntu /home/ubuntu/taskmanager"
         scp -i ~/.ssh/github-actions-key.pem \
             -o StrictHostKeyChecking=no \
             docker/docker-compose.prod.yml \
