@@ -1,4 +1,5 @@
 import os
+import re
 from .base import BaseConfig
 
 
@@ -21,3 +22,7 @@ class DevelopmentConfig(BaseConfig):
     CACHE_DEFAULT_TIMEOUT = 60  # Shorter timeout for dev
 
     LOG_TO_STDOUT = True
+
+    # Allow any localhost origin in development (covers any port the Angular
+    # dev server or other local tooling might choose, e.g. 4200, 56675, …).
+    CORS_ORIGINS = [re.compile(r'http://localhost(:\d+)?')]

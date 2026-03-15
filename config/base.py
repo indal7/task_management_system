@@ -21,6 +21,9 @@ class BaseConfig:
     
     # CORS settings
     CORS_HEADERS = 'Content-Type,Authorization'
+    # Comma-separated list of allowed origins (overridden per environment).
+    # Override via the CORS_ORIGINS environment variable.
+    CORS_ORIGINS = [o.strip() for o in os.getenv('CORS_ORIGINS', '').split(',') if o.strip()]
 
     # Logging settings
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
