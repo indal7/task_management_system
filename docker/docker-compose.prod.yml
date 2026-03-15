@@ -1,17 +1,30 @@
 version: '3.8'
 
+# Production docker-compose – deployed on EC2.
+# The application image is pulled from ECR (set ECR_IMAGE before running).
+# Usage (EC2): ECR_IMAGE=<ecr-uri> docker compose -f docker-compose.prod.yml up -d
+#
+# On EC2 this file lives at /home/ubuntu/taskmanager/docker-compose.prod.yml
+# with env/.env.prod in the same directory.
+#
+# Redis / Cache: Production uses AWS ElastiCache. Set REDIS_URL and
+# CACHE_REDIS_URL in env/.env.prod to point at your ElastiCache endpoint.
+# No local Redis container is needed here.
+
 services:
   app:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    image: taskmanager:prod
+    image: ${ECR_IMAGE:-taskmanager:prod}
     container_name: taskmanager_app
     restart: unless-stopped
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=wsgi:app
     env_file:
-      - ../env/.env.prod
+      - ./env/.env.prod
     ports:
       - "5000:5000"
+    networks:
+      - taskmanager_network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
@@ -25,5 +38,6 @@ services:
         max-file: "3"
 
 networks:
-  default:
+  taskmanager_network:
+    driver: bridge
     name: taskmanager_network

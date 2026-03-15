@@ -1,7 +1,7 @@
 version: '3.8'
 
-# Development docker-compose (legacy alias – prefer docker-compose.dev.yml).
-# Usage: docker compose -f docker/docker-compose.yml up
+# Development docker-compose – builds locally, mounts source for live reload.
+# Usage: docker compose -f docker/docker-compose.dev.yml up
 
 services:
   app:
@@ -19,7 +19,7 @@ services:
     env_file:
       - ../env/.env.dev
     volumes:
-      - ..:/app
+      - ..:/app          # Live-reload: source changes reflected immediately
     ports:
       - "5000:5000"
     depends_on:
