@@ -9,6 +9,9 @@
 terraform.tfvars
 *.auto.tfvars
 environments/*/secrets.tfvars
+# Allow environment-specific template tfvars (contain only placeholders, no real secrets)
+!environments/dev/terraform.tfvars
+!environments/prod/terraform.tfvars
 
 # Crash logs
 crash.log
