@@ -119,8 +119,13 @@ echo "[$(date)] Authenticating with ECR…"
 aws ecr get-login-password --region "${aws_region}" | \
   docker login --username AWS --password-stdin "${ecr_repo_url}"
 
-# ── Docker Compose File ────────────────────────────────────────────────────────
-cat > "$APP_DIR/docker-compose.prod.yml" <<DCEOF
+# ── Environment-specific Docker Compose Files ─────────────────────────────────
+ENVIRONMENT="${environment}"
+
+if [ "$ENVIRONMENT" = "prod" ]; then
+  COMPOSE_FILE="$APP_DIR/docker-compose.prod.yml"
+
+  cat > "$COMPOSE_FILE" <<DCEOF
 version: '3.8'
 
 services:
@@ -137,13 +142,49 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 40s
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "3"
 DCEOF
+
+else
+  COMPOSE_FILE="$APP_DIR/docker-compose.dev.yml"
+
+  # On EC2, both dev and prod deployments use the same secrets file (.env.prod)
+  # written from AWS Secrets Manager. The dev distinction is the runtime command:
+  # python app.py (with hot-reload support) instead of gunicorn.
+  cat > "$COMPOSE_FILE" <<DCEOF
+version: '3.8'
+
+services:
+  app:
+    image: ${ecr_repo_url}:latest
+    container_name: taskmanager_app
+    command: python app.py
+    restart: unless-stopped
+    env_file:
+      - /home/ubuntu/taskmanager/env/.env.prod
+    ports:
+      - "${flask_port}:${flask_port}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${flask_port}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+DCEOF
+
+fi
+
+echo "[$(date)] Created compose file: $COMPOSE_FILE (environment: $ENVIRONMENT)"
 
 # ── Pull and Start Container ───────────────────────────────────────────────────
 echo "[$(date)] Pulling Docker image from ECR…"
@@ -155,9 +196,40 @@ if ! docker pull "${ecr_repo_url}:latest"; then
 fi
 
 echo "[$(date)] Starting application containers…"
-docker compose -f "$APP_DIR/docker-compose.prod.yml" up -d --remove-orphans
+docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
+
+# ── Database Migrations ────────────────────────────────────────────────────────
+echo "[$(date)] Waiting for application to be ready before running migrations…"
+HEALTH_URL="http://localhost:${flask_port}/health"
+MAX_WAIT=120
+WAITED=0
+until curl -sf "$HEALTH_URL" >/dev/null 2>&1 || [ "$WAITED" -ge "$MAX_WAIT" ]; do
+  sleep 5
+  WAITED=$((WAITED + 5))
+  echo "[$(date)] Still waiting for app (${WAITED}s)…"
+done
+
+if curl -sf "$HEALTH_URL" >/dev/null 2>&1; then
+  echo "[$(date)] App is healthy. Running database migrations…"
+  MIGRATION_MSG="Auto migration $(date +%Y%m%d%H%M%S)"
+  if docker compose -f "$COMPOSE_FILE" exec -T app flask db migrate -m "$MIGRATION_MSG" 2>&1; then
+    echo "[$(date)] Migration script created successfully."
+  else
+    echo "[$(date)] Migration script step skipped (no changes detected or already exists)."
+  fi
+
+  if docker compose -f "$COMPOSE_FILE" exec -T app flask db upgrade 2>&1; then
+    echo "[$(date)] Database upgrade applied successfully."
+  else
+    echo "[$(date)] ⚠️  Database upgrade failed – check logs for details."
+  fi
+else
+  echo "[$(date)] ⚠️  App did not become healthy within ${MAX_WAIT}s – skipping migrations."
+fi
 
 # ── Install systemd service for auto-restart on reboot ────────────────────────
+# Note: $COMPOSE_FILE is expanded by bash when writing the heredoc (unquoted delimiter),
+# so the systemd unit file contains the literal resolved path.
 cat > /etc/systemd/system/taskmanager.service <<SERVICEEOF
 [Unit]
 Description=Task Management System
@@ -168,8 +240,8 @@ After=docker.service
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/home/ubuntu/taskmanager
-ExecStart=/usr/bin/docker compose -f /home/ubuntu/taskmanager/docker-compose.prod.yml up -d --remove-orphans
-ExecStop=/usr/bin/docker compose -f /home/ubuntu/taskmanager/docker-compose.prod.yml down
+ExecStart=/usr/bin/docker compose -f $COMPOSE_FILE up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -f $COMPOSE_FILE down
 User=ubuntu
 
 [Install]
