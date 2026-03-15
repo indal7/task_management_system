@@ -101,28 +101,37 @@ jobs:
     - name: Pull latest image and restart containers on EC2
       env:
         IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
-        ECR_URI: ${{ needs.build-and-push.outputs.ecr_uri }}
         AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'taskmanager-dev' }}
         EC2_HOST: ${{ secrets.EC2_HOST }}
       run: |
-        ssh -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST }} << ENDSSH
+        ssh -T -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST }} << ENDSSH
           set -e
+
+          # Derive ECR URI on the EC2 host using its IAM role.
+          # This avoids passing the ECR URI as a job output, which GitHub Actions
+          # would suppress because the AWS account ID is treated as a secret.
+          ACCOUNT_ID=\$(aws sts get-caller-identity --query Account --output text)
+          if [ -z "\$ACCOUNT_ID" ]; then
+            echo "❌ Failed to retrieve AWS Account ID from EC2 IAM role"
+            exit 1
+          fi
+          ECR_REGISTRY="\$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+          ECR_URI="\$ECR_REGISTRY/$ECR_REPOSITORY"
 
           # Authenticate Docker with ECR
           aws ecr get-login-password --region $AWS_REGION | \
-            docker login --username AWS --password-stdin \
-            \$(echo "$ECR_URI" | cut -d/ -f1)
+            docker login --username AWS --password-stdin "\$ECR_REGISTRY"
 
           # Pull the new image
-          docker pull $ECR_URI:latest
+          docker pull "\$ECR_URI:latest"
 
           # Ensure the taskmanager directory exists
           mkdir -p /home/ubuntu/taskmanager/env
 
           # Bring up the stack using the prod compose file
           # ECR_IMAGE is exported so docker-compose.prod.yml can reference it
-          export ECR_IMAGE=$ECR_URI
+          export ECR_IMAGE="\$ECR_URI"
           docker compose -f /home/ubuntu/taskmanager/docker-compose.prod.yml \
             up -d --remove-orphans
 
