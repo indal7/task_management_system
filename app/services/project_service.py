@@ -1,6 +1,7 @@
 # app/services/project_service.py
 from app.models.project import Project
 from app.models.user import User
+from app.models.enums import ProjectStatus
 from app import db
 from app.utils.cache_utils import cache, cached_per_user, CacheKeys, invalidate_user_cache, invalidate_project_cache
 from app.utils.logger import get_logger, log_db_query
@@ -20,7 +21,8 @@ class ProjectService:
                 name=data.get('name'),
                 description=data.get('description'),
                 owner_id=owner.id,
-                status=data.get('status', 'active')
+                status=ProjectStatus[data.get('status', 'PLANNING').upper()]
+                if data.get('status') else ProjectStatus.PLANNING
             )
 
             db.session.add(project)

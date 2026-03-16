@@ -12,6 +12,12 @@ from app.routes.analytics_routes import analytics_bp
 from app.routes.sprint_routes import sprint_bp
 from app.routes.enum_routes import enum_bp
 from app.routes.cache_routes import cache_bp
+from app.routes.user_routes import user_bp
+from app.routes.member_routes import member_bp
+from app.routes.attachment_routes import attachment_bp
+from app.routes.search_routes import search_bp
+from app.routes.activity_routes import activity_bp
+from app.routes.bulk_routes import bulk_bp
 
 logger = logging.getLogger('app.api')
 
@@ -28,6 +34,12 @@ def register_blueprints(app: Flask):
         analytics_bp,
         enum_bp,
         cache_bp,
+        user_bp,
+        member_bp,
+        attachment_bp,
+        search_bp,
+        activity_bp,
+        bulk_bp,
     ]
 
     for blueprint in blueprints:
@@ -37,6 +49,23 @@ def register_blueprints(app: Flask):
     register_health_routes(app)
 
     logger.info("All blueprints registered successfully")
+
+
+def register_health_routes(app: Flask):
+    """Register health check endpoints"""
+
+    @app.route('/health')
+    def health_check():
+        return {'status': 'healthy', 'service': 'task-management-api'}, 200
+
+    @app.route('/health/db')
+    def db_health_check():
+        from app.utils.database import test_connection
+        try:
+            test_connection()
+            return {'status': 'healthy', 'database': 'connected'}, 200
+        except Exception as e:
+            return {'status': 'unhealthy', 'database': 'disconnected', 'error': str(e)}, 500
 
 
 def register_health_routes(app: Flask):

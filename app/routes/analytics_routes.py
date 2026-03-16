@@ -148,3 +148,135 @@ def task_priority_distribution():
     except Exception as e:
         logger.error(f"Error fetching task priority distribution | Error: {str(e)}", exc_info=True)
         return server_error_response(f'Error fetching task priority distribution: {str(e)}')
+
+
+@analytics_bp.route('/dashboard', methods=['GET'])
+@jwt_required()
+@log_request
+def dashboard_summary():
+    """Return a consolidated dashboard metrics object for the current user."""
+    user_id = get_jwt_identity()
+    cache_key = f"dashboard_summary:{user_id}"
+    cached_result = cache.get(cache_key)
+    log_cache_operation("GET", cache_key, hit=bool(cached_result))
+
+    if cached_result:
+        logger.info(f"Dashboard summary fetched from cache | User: {user_id}")
+        return success_response("Dashboard summary retrieved successfully (from cache)", cached_result)
+
+    try:
+        result = AnalyticsService.get_dashboard_summary(user_id)
+
+        if isinstance(result, tuple) and len(result) == 2:
+            data, status_code = result
+            if status_code != 200:
+                return error_response(data.get('error', 'Error fetching dashboard'), status_code=status_code)
+            result = data
+
+        cache.set(cache_key, result, timeout=300)
+        log_cache_operation("SET", cache_key)
+        logger.info(f"Dashboard summary fetched | User: {user_id}")
+        return success_response("Dashboard summary retrieved successfully", result)
+
+    except Exception as e:
+        logger.error(f"Dashboard summary error | User: {user_id} | Error: {str(e)}", exc_info=True)
+        return server_error_response(f'Error fetching dashboard summary: {str(e)}')
+
+
+@analytics_bp.route('/projects/<int:project_id>', methods=['GET'])
+@jwt_required()
+@log_request
+def project_analytics(project_id):
+    """Return analytics for a specific project."""
+    cache_key = f"project_analytics:{project_id}"
+    cached_result = cache.get(cache_key)
+    log_cache_operation("GET", cache_key, hit=bool(cached_result))
+
+    if cached_result:
+        logger.info(f"Project analytics fetched from cache | Project: {project_id}")
+        return success_response("Project analytics retrieved successfully (from cache)", cached_result)
+
+    try:
+        result = AnalyticsService.get_project_analytics(project_id)
+
+        if isinstance(result, tuple) and len(result) == 2:
+            data, status_code = result
+            if status_code != 200:
+                return error_response(data.get('error', 'Error fetching project analytics'), status_code=status_code)
+            result = data
+
+        cache.set(cache_key, result, timeout=300)
+        log_cache_operation("SET", cache_key)
+        logger.info(f"Project analytics fetched | Project: {project_id}")
+        return success_response("Project analytics retrieved successfully", result)
+
+    except Exception as e:
+        logger.error(f"Project analytics error | Project: {project_id} | Error: {str(e)}", exc_info=True)
+        return server_error_response(f'Error fetching project analytics: {str(e)}')
+
+
+@analytics_bp.route('/sprints/<int:sprint_id>', methods=['GET'])
+@jwt_required()
+@log_request
+def sprint_metrics(sprint_id):
+    """Return performance metrics for a specific sprint."""
+    cache_key = f"sprint_metrics:{sprint_id}"
+    cached_result = cache.get(cache_key)
+    log_cache_operation("GET", cache_key, hit=bool(cached_result))
+
+    if cached_result:
+        logger.info(f"Sprint metrics fetched from cache | Sprint: {sprint_id}")
+        return success_response("Sprint metrics retrieved successfully (from cache)", cached_result)
+
+    try:
+        result = AnalyticsService.get_sprint_metrics(sprint_id)
+
+        if isinstance(result, tuple) and len(result) == 2:
+            data, status_code = result
+            if status_code != 200:
+                return error_response(data.get('error', 'Error fetching sprint metrics'), status_code=status_code)
+            result = data
+
+        cache.set(cache_key, result, timeout=300)
+        log_cache_operation("SET", cache_key)
+        logger.info(f"Sprint metrics fetched | Sprint: {sprint_id}")
+        return success_response("Sprint metrics retrieved successfully", result)
+
+    except Exception as e:
+        logger.error(f"Sprint metrics error | Sprint: {sprint_id} | Error: {str(e)}", exc_info=True)
+        return server_error_response(f'Error fetching sprint metrics: {str(e)}')
+
+
+@analytics_bp.route('/velocity', methods=['GET'])
+@jwt_required()
+@log_request
+def team_velocity():
+    """Return team velocity over recent completed sprints."""
+    project_id = request.args.get('project_id', type=int)
+    num_sprints = request.args.get('num_sprints', 5, type=int)
+
+    cache_key = f"team_velocity:{project_id}:{num_sprints}"
+    cached_result = cache.get(cache_key)
+    log_cache_operation("GET", cache_key, hit=bool(cached_result))
+
+    if cached_result:
+        logger.info(f"Team velocity fetched from cache")
+        return success_response("Team velocity retrieved successfully (from cache)", cached_result)
+
+    try:
+        result = AnalyticsService.get_team_velocity(project_id=project_id, num_sprints=num_sprints)
+
+        if isinstance(result, tuple) and len(result) == 2:
+            data, status_code = result
+            if status_code != 200:
+                return error_response(data.get('error', 'Error fetching velocity'), status_code=status_code)
+            result = data
+
+        cache.set(cache_key, result, timeout=300)
+        log_cache_operation("SET", cache_key)
+        logger.info(f"Team velocity fetched")
+        return success_response("Team velocity retrieved successfully", result)
+
+    except Exception as e:
+        logger.error(f"Team velocity error | Error: {str(e)}", exc_info=True)
+        return server_error_response(f'Error fetching team velocity: {str(e)}')
