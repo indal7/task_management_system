@@ -1,12 +1,12 @@
 name: Dev Deploy
 
-# Auto-deploys on every push to the `develop` branch.
+# Auto-deploys on every push to the master branch.
 #
 # Required GitHub Secrets (Settings → Secrets and variables → Actions):
 #   AWS_ACCESS_KEY_ID     – IAM access key with ECR push + EC2 permissions
 #   AWS_SECRET_ACCESS_KEY – Matching secret key
 #   AWS_REGION            – e.g. ap-south-1  (defaults to ap-south-1 if omitted)
-#   ECR_REPOSITORY    – ECR repository name, e.g. taskmanager-dev
+#   ECR_REPOSITORY_DEV    – ECR repository name, e.g. taskmanager-dev
 #   EC2_HOST_DEV          – Public IP / hostname of the dev EC2 instance
 #   EC2_KEY_DEV           – Private SSH key for the dev EC2 instance
 
@@ -25,7 +25,7 @@ jobs:
 
     outputs:
       image_tag: ${{ steps.meta.outputs.version }}
-      ecr_registry: ${{ steps.login-ecr.outputs.registry }}
+      ecr_registry: ${{ steps.capture-registry.outputs.registry }}
 
     steps:
       - name: Checkout Code
@@ -42,11 +42,18 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Capture ECR Registry
+        id: capture-registry
+        run: |
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
+          echo "✅ ECR Registry: $REGISTRY"
+
       - name: Generate image metadata (tags & labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY || 'taskmanager-dev' }}
+          images: ${{ steps.capture-registry.outputs.registry }}/${{ secrets.ECR_REPOSITORY_DEV || 'taskmanager-dev' }}
           tags: |
             type=sha,prefix=,format=short
             type=raw,value=dev-latest
@@ -111,12 +118,12 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          # Build the ECR image URI on GitHub Actions runner
+          # Build the full ECR image URI on the GitHub Actions runner
           ECR_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
           
           echo "🔐 ECR_IMAGE resolved to: $ECR_IMAGE"
           
-          # Create a temporary script to run on EC2
+          # Create a temporary deployment script
           cat > /tmp/ecr_deploy.sh << 'SCRIPT'
           #!/bin/bash
           set -e
@@ -127,47 +134,39 @@ jobs:
           AWS_SECRET_ACCESS_KEY="$4"
           
           echo "🔐 Authenticating Docker with ECR..."
-          echo "AWS_REGION: $AWS_REGION"
           echo "ECR_IMAGE: $ECR_IMAGE"
+          echo "AWS_REGION: $AWS_REGION"
           
-          # Verify credentials are present
-          if [ -z "$AWS_ACCESS_KEY_ID" ]; then
-            echo "❌ AWS_ACCESS_KEY_ID is empty"
-            exit 1
-          fi
-          if [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-            echo "❌ AWS_SECRET_ACCESS_KEY is empty"
-            exit 1
-          fi
-
+          # Export AWS credentials
           export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
           export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
           export AWS_REGION="$AWS_REGION"
-
+          
+          # Get login password and authenticate
           aws ecr get-login-password --region "$AWS_REGION" | \
             docker login --username AWS --password-stdin "$(echo $ECR_IMAGE | cut -d'/' -f1)"
-
+          
           echo "📥 Pulling image: $ECR_IMAGE"
           docker pull "$ECR_IMAGE"
-
+          
           echo "🚀 Restarting application..."
           cd /home/ubuntu/taskmanager
           ECR_IMAGE="$ECR_IMAGE" \
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
-
+          
           sleep 15
           docker ps
           SCRIPT
           
           chmod +x /tmp/ecr_deploy.sh
           
-          # Copy the script to EC2
+          # Copy script to EC2
           scp -i ~/.ssh/github-actions-key.pem \
               -o StrictHostKeyChecking=no \
               /tmp/ecr_deploy.sh \
               ubuntu@${{ secrets.EC2_HOST_DEV }}:/tmp/ecr_deploy.sh
           
-          # Execute the script on EC2 with actual parameters
+          # Execute on EC2 with credentials
           ssh -i ~/.ssh/github-actions-key.pem \
               -o StrictHostKeyChecking=no \
               ubuntu@${{ secrets.EC2_HOST_DEV }} \
