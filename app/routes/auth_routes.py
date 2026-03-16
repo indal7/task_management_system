@@ -138,6 +138,47 @@ def test():
     logger.info("Ping request received")
     return success_response("Auth API is working!")
 
+@auth_bp.route('/refresh', methods=['POST'])
+def refresh_token():
+    """Generate a new access token using a valid refresh token."""
+    from flask_jwt_extended import decode_token, create_access_token, create_refresh_token
+    try:
+        # Accept refresh token from body OR Authorization header
+        data = request.get_json() or {}
+        body_token = data.get('refresh_token')
+
+        # Try Authorization header first, then fall back to body
+        auth_header = request.headers.get('Authorization', '')
+        header_token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else None
+
+        token = header_token or body_token
+
+        if not token:
+            logger.warning("Token refresh failed: no refresh token provided")
+            return validation_error_response('No refresh token provided')
+
+        # Decode and validate the refresh token
+        decoded = decode_token(token)
+        if decoded.get('type') != 'refresh':
+            return unauthorized_response('Not a refresh token')
+
+        user_id = decoded['sub']
+        from app.models.user import User
+        user = User.query.get_or_404(user_id)
+
+        new_access_token = create_access_token(identity=str(user.id))
+        new_refresh_token = create_refresh_token(identity=str(user.id))
+
+        logger.info(f"Token refreshed successfully | User: {user.id}")
+        return success_response("Token refreshed successfully", {
+            'access_token': new_access_token,
+            'refresh_token': new_refresh_token,
+            'user': user.to_dict()
+        })
+    except Exception as e:
+        logger.error(f"Token refresh error: {str(e)}")
+        return unauthorized_response('Invalid or expired refresh token')
+
 @auth_bp.route('/users', methods=['GET'])
 @jwt_required()
 def get_users():

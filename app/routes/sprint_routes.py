@@ -28,6 +28,35 @@ def cache_result(key, fetch_func, timeout=300):
     return data
 
 
+@sprint_bp.route('', methods=['GET'])
+@jwt_required()
+def list_sprints():
+    """List all sprints with optional filtering and pagination."""
+    user_id = get_jwt_identity()
+    log_api_request('/api/sprints', 'GET', user_id, request.remote_addr)
+
+    # Pagination parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+
+    # Filter parameters
+    filters = {}
+    if request.args.get('status'):
+        filters['status'] = request.args.get('status')
+    if request.args.get('project_id'):
+        filters['project_id'] = int(request.args.get('project_id'))
+    if request.args.get('search'):
+        filters['search'] = request.args.get('search')
+
+    result, status_code = SprintService.list_sprints(filters, page, per_page)
+    if status_code != 200:
+        logger.warning(f"Sprints list fetch failed | User: {user_id} | {result.get('error')}")
+        return error_response(result.get('error', 'Error fetching sprints'), status_code=status_code)
+
+    logger.info(f"Sprints retrieved | User: {user_id}")
+    return success_response("Sprints retrieved successfully", result)
+
+
 @sprint_bp.route('', methods=['POST'])
 @jwt_required()
 def create_sprint():
@@ -135,6 +164,85 @@ def get_project_sprints(project_id):
 
     logger.info(f"Project sprints retrieved | Project: {project_id} | User: {user_id} | Count: {len(result)}")
     return success_response("Project sprints retrieved successfully", result)
+
+
+@sprint_bp.route('/<int:sprint_id>/start', methods=['POST'])
+@jwt_required()
+def start_sprint(sprint_id):
+    user_id = get_jwt_identity()
+    log_api_request(f'/api/sprints/{sprint_id}/start', 'POST', user_id, request.remote_addr)
+
+    result, status_code = SprintService.start_sprint(sprint_id, user_id)
+    if status_code != 200:
+        logger.warning(f"Sprint start failed | Sprint: {sprint_id} | User: {user_id} | {result.get('error')}")
+        return error_response(result.get('error', 'Error starting sprint'), status_code=status_code)
+
+    logger.info(f"Sprint started | Sprint: {sprint_id} | User: {user_id}")
+    cache.delete(f"sprint:{sprint_id}")
+    return success_response("Sprint started successfully", result)
+
+
+@sprint_bp.route('/<int:sprint_id>/complete', methods=['POST'])
+@jwt_required()
+def complete_sprint(sprint_id):
+    user_id = get_jwt_identity()
+    log_api_request(f'/api/sprints/{sprint_id}/complete', 'POST', user_id, request.remote_addr)
+
+    result, status_code = SprintService.complete_sprint(sprint_id, user_id)
+    if status_code != 200:
+        logger.warning(f"Sprint complete failed | Sprint: {sprint_id} | User: {user_id} | {result.get('error')}")
+        return error_response(result.get('error', 'Error completing sprint'), status_code=status_code)
+
+    logger.info(f"Sprint completed | Sprint: {sprint_id} | User: {user_id}")
+    cache.delete(f"sprint:{sprint_id}")
+    return success_response("Sprint completed successfully", result)
+
+
+@sprint_bp.route('/<int:sprint_id>/tasks', methods=['GET'])
+@jwt_required()
+def get_sprint_tasks(sprint_id):
+    user_id = get_jwt_identity()
+    log_api_request(f'/api/sprints/{sprint_id}/tasks', 'GET', user_id, request.remote_addr)
+
+    result, status_code = SprintService.get_sprint_tasks(sprint_id, user_id)
+    if status_code != 200:
+        logger.warning(f"Sprint tasks fetch failed | Sprint: {sprint_id} | User: {user_id} | {result.get('error')}")
+        return error_response(result.get('error', 'Error fetching sprint tasks'), status_code=status_code)
+
+    logger.info(f"Sprint tasks retrieved | Sprint: {sprint_id} | User: {user_id} | Count: {len(result)}")
+    return success_response("Sprint tasks retrieved successfully", result)
+
+
+@sprint_bp.route('/<int:sprint_id>/tasks/<int:task_id>', methods=['POST'])
+@jwt_required()
+def add_task_to_sprint(sprint_id, task_id):
+    user_id = get_jwt_identity()
+    log_api_request(f'/api/sprints/{sprint_id}/tasks/{task_id}', 'POST', user_id, request.remote_addr)
+
+    result, status_code = SprintService.add_task_to_sprint(sprint_id, task_id, user_id)
+    if status_code != 200:
+        logger.warning(f"Add task to sprint failed | Sprint: {sprint_id} | Task: {task_id} | {result.get('error')}")
+        return error_response(result.get('error', 'Error adding task to sprint'), status_code=status_code)
+
+    logger.info(f"Task added to sprint | Sprint: {sprint_id} | Task: {task_id} | User: {user_id}")
+    cache.delete(f"sprint:{sprint_id}")
+    return success_response("Task added to sprint successfully", result)
+
+
+@sprint_bp.route('/<int:sprint_id>/tasks/<int:task_id>', methods=['DELETE'])
+@jwt_required()
+def remove_task_from_sprint(sprint_id, task_id):
+    user_id = get_jwt_identity()
+    log_api_request(f'/api/sprints/{sprint_id}/tasks/{task_id}', 'DELETE', user_id, request.remote_addr)
+
+    result, status_code = SprintService.remove_task_from_sprint(sprint_id, task_id, user_id)
+    if status_code != 200:
+        logger.warning(f"Remove task from sprint failed | Sprint: {sprint_id} | Task: {task_id} | {result.get('error')}")
+        return error_response(result.get('error', 'Error removing task from sprint'), status_code=status_code)
+
+    logger.info(f"Task removed from sprint | Sprint: {sprint_id} | Task: {task_id} | User: {user_id}")
+    cache.delete(f"sprint:{sprint_id}")
+    return success_response("Task removed from sprint successfully", result)
 
 
 @sprint_bp.route('/<int:sprint_id>/burndown', methods=['GET'])
