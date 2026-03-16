@@ -41,7 +41,7 @@ jobs:
         IMAGE_TAG: ${{ steps.image_tag.outputs.tag }}
       run: |
         ECR_URI="$ECR_REGISTRY/$ECR_REPOSITORY"
-        docker build -f docker/Dockerfile \
+        docker build -f docker/Dockerfile.dev \
           -t "$ECR_URI:$IMAGE_TAG" \
           -t "$ECR_URI:latest" \
           .
