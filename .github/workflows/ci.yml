@@ -1,4 +1,4 @@
-name: CI – Lint & Test
+name: CI – Lint, Test & Build
 
 on:
   push:
@@ -11,6 +11,7 @@ permissions:
   contents: read
 
 jobs:
+  # ── Lint & Test ──────────────────────────────────────────────────────────────
   lint-and-test:
     name: Lint & Test
     runs-on: ubuntu-latest
@@ -42,8 +43,7 @@ jobs:
         run: pip install -r requirements/dev.txt
 
       - name: Lint with flake8
-        run: |
-          flake8 app config
+        run: flake8 app config
 
       - name: Run Tests
         env:
@@ -53,3 +53,37 @@ jobs:
         run: |
           export PYTHONPATH="${PYTHONPATH}:$(pwd)"
           pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
+
+  # ── Docker Build Validation ───────────────────────────────────────────────────
+  # Verifies that both multi-stage build targets produce valid images on every
+  # push. Layer cache is stored in the GitHub Actions cache to speed up builds.
+  docker-build:
+    name: Docker Build Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build development image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: development
+          push: false
+          cache-from: type=gha,scope=dev
+          cache-to: type=gha,mode=max,scope=dev
+
+      - name: Build production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: production
+          push: false
+          cache-from: type=gha,scope=prod
+          cache-to: type=gha,mode=max,scope=prod

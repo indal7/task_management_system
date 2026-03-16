@@ -1,157 +1,183 @@
 name: Prod Deploy
 
-# Triggers on every push to master.
+# Deploys to production on every push to `master`.
 # The "deploy" job is gated behind a GitHub Environment with a required reviewer –
 # no code reaches production without a manual approval click.
 #
-# Setup steps:
-#   1. Go to Settings → Environments → New environment → name it "production"
+# Setup:
+#   1. Go to Settings → Environments → New environment → name it "production".
 #   2. Under "Required reviewers" add the team/user who must approve each release.
-#   3. Add the secrets listed below to that environment (or to repository secrets).
+#   3. Add the secrets listed below to the "production" environment (or repository secrets).
 #
-# Required GitHub Secrets (Settings → Secrets and variables → Actions):
-#   AWS_ACCESS_KEY_ID_PROD    – IAM user access key with ECR + describe-instances perms
+# Required GitHub Secrets:
+#   AWS_ACCESS_KEY_ID_PROD     – IAM access key with ECR push + EC2 permissions
 #   AWS_SECRET_ACCESS_KEY_PROD – Matching secret key
-#   AWS_REGION_PROD           – e.g. ap-south-1  (defaults to ap-south-1 if omitted)
-#   EC2_HOST_PROD             – Public IP / hostname of the prod EC2 instance
-#   EC2_KEY_PROD              – Private SSH key to reach the prod EC2 instance
+#   AWS_REGION_PROD            – e.g. ap-south-1  (defaults to ap-south-1 if omitted)
+#   ECR_REPOSITORY_PROD        – ECR repository name, e.g. taskmanager-prod
+#   EC2_HOST_PROD              – Public IP / hostname of the prod EC2 instance
+#   EC2_KEY_PROD               – Private SSH key for the prod EC2 instance
 
-# on:
-#   push:
-#     branches: [ master ]
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for manual deployment"
+        required: true
+        default: "Manual production deployment"
 
-# jobs:
-#   # ── Build & Push Docker image to ECR (prod) ──────────────────────────────────
-#   build-and-push:
-#     name: Build & Push to ECR (prod)
-#     runs-on: ubuntu-latest
-#     permissions:
-#       contents: read
-#       id-token: write
+jobs:
+  # ── Build & Push Docker image to ECR (prod) ──────────────────────────────
+  build-and-push:
+    name: Build & Push to ECR (prod)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
 
-#     outputs:
-#       image_tag: ${{ steps.image_tag.outputs.tag }}
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      ecr_registry: ${{ steps.login-ecr.outputs.registry }}
 
-#     steps:
-#     - name: Checkout Code
-#       uses: actions/checkout@v4
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-#     - name: Configure AWS Credentials
-#       uses: aws-actions/configure-aws-credentials@v4
-#       with:
-#         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
-#         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
-#         aws-region: ${{ secrets.AWS_REGION_PROD || 'ap-south-1' }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: ${{ secrets.AWS_REGION_PROD || 'ap-south-1' }}
 
-#     - name: Login to Amazon ECR
-#       id: login-ecr
-#       uses: aws-actions/amazon-ecr-login@v2
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-#     - name: Generate image tag
-#       id: image_tag
-#       run: echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Generate image metadata (tags & labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_PROD || 'taskmanager-prod' }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest
 
-#     - name: Build, tag, and push image to ECR (prod)
-#       env:
-#         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-#         ECR_REPOSITORY: taskmanager-prod
-#         IMAGE_TAG: ${{ steps.image_tag.outputs.tag }}
-#       run: |
-#         ECR_URI="$ECR_REGISTRY/$ECR_REPOSITORY"
-#         docker build -f docker/Dockerfile \
-#           -t "$ECR_URI:$IMAGE_TAG" \
-#           -t "$ECR_URI:latest" \
-#           .
-#         docker push "$ECR_URI:$IMAGE_TAG"
-#         docker push "$ECR_URI:latest"
-#         echo "✅ Pushed $ECR_URI:$IMAGE_TAG"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-#   # ── Deploy to PROD EC2 (requires manual approval via GitHub Environment) ─────
-#   deploy:
-#     name: Deploy to PROD EC2
-#     runs-on: ubuntu-latest
-#     needs: build-and-push
-#     environment: production   # ← pauses here until a reviewer approves in GitHub UI
-#     permissions:
-#       contents: read
+      - name: Build and push production image to ECR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=prod
+          cache-to: type=gha,mode=max,scope=prod
 
-#     steps:
-#     - name: Checkout Code
-#       uses: actions/checkout@v4
+  # ── Deploy to PROD EC2 (requires manual approval via GitHub Environment) ──
+  deploy:
+    name: Deploy to PROD EC2
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production   # ← pauses here until a reviewer approves in GitHub UI
+    permissions:
+      contents: read
 
-#     - name: Add SSH Key
-#       run: |
-#         mkdir -p ~/.ssh
-#         echo "${{ secrets.EC2_KEY_PROD }}" > ~/.ssh/github-actions-key.pem
-#         chmod 600 ~/.ssh/github-actions-key.pem
-#         ssh-keyscan -H ${{ secrets.EC2_HOST_PROD }} >> ~/.ssh/known_hosts 2>/dev/null || true
-#         ssh -i ~/.ssh/github-actions-key.pem \
-#             -o ConnectTimeout=30 \
-#             -o StrictHostKeyChecking=no \
-#             ubuntu@${{ secrets.EC2_HOST_PROD }} \
-#             "echo '✅ SSH connection successful - $(date)'"
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-#     - name: Copy docker-compose file to PROD EC2
-#       run: |
-#         ssh -i ~/.ssh/github-actions-key.pem \
-#             -o StrictHostKeyChecking=no \
-#             ubuntu@${{ secrets.EC2_HOST_PROD }} \
-#             "sudo mkdir -p /home/ubuntu/taskmanager && sudo chown -R ubuntu:ubuntu /home/ubuntu/taskmanager"
-#         scp -i ~/.ssh/github-actions-key.pem \
-#             -o StrictHostKeyChecking=no \
-#             docker/docker-compose.prod.yml \
-#             ubuntu@${{ secrets.EC2_HOST_PROD }}:/home/ubuntu/taskmanager/docker-compose.prod.yml
-#         echo "✅ docker-compose.prod.yml copied to PROD EC2"
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_KEY_PROD }}" > ~/.ssh/github-actions-key.pem
+          chmod 600 ~/.ssh/github-actions-key.pem
+          ssh-keyscan -H "${{ secrets.EC2_HOST_PROD }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh -i ~/.ssh/github-actions-key.pem \
+              -o ConnectTimeout=30 \
+              -o StrictHostKeyChecking=no \
+              ubuntu@${{ secrets.EC2_HOST_PROD }} \
+              "echo '✅ SSH connection successful'"
 
-#     - name: Pull latest image and restart containers on PROD EC2
-#       env:
-#         IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
-#         AWS_REGION: ${{ secrets.AWS_REGION_PROD || 'ap-south-1' }}
-#         ECR_REPOSITORY: taskmanager-prod
-#       run: |
-#         ssh -T -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST_PROD }} << ENDSSH
-#           set -e
-#           ACCOUNT_ID=\$(aws sts get-caller-identity --query Account --output text)
-#           ECR_REGISTRY="\$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-#           ECR_URI="\$ECR_REGISTRY/$ECR_REPOSITORY"
+      - name: Copy docker-compose file to PROD EC2
+        run: |
+          ssh -i ~/.ssh/github-actions-key.pem \
+              -o StrictHostKeyChecking=no \
+              ubuntu@${{ secrets.EC2_HOST_PROD }} \
+              "mkdir -p /home/ubuntu/taskmanager/env"
+          scp -i ~/.ssh/github-actions-key.pem \
+              -o StrictHostKeyChecking=no \
+              docker/docker-compose.prod.yml \
+              ubuntu@${{ secrets.EC2_HOST_PROD }}:/home/ubuntu/taskmanager/docker-compose.prod.yml
+          echo "✅ docker-compose.prod.yml copied to PROD EC2"
 
-#           aws ecr get-login-password --region $AWS_REGION | \
-#             docker login --username AWS --password-stdin "\$ECR_REGISTRY"
+      - name: Pull latest image and restart on PROD EC2
+        env:
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+          AWS_REGION: ${{ secrets.AWS_REGION_PROD || 'ap-south-1' }}
+          ECR_REGISTRY: ${{ needs.build-and-push.outputs.ecr_registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_PROD || 'taskmanager-prod' }}
+        run: |
+          ssh -T -i ~/.ssh/github-actions-key.pem \
+              -o StrictHostKeyChecking=no \
+              ubuntu@${{ secrets.EC2_HOST_PROD }} \
+              bash -s -- "$ECR_REGISTRY" "$ECR_REPOSITORY" "$IMAGE_TAG" "$AWS_REGION" << 'ENDSSH'
+            set -e
+            ECR_REGISTRY="$1"
+            ECR_REPOSITORY="$2"
+            IMAGE_TAG="$3"
+            AWS_REGION="$4"
+            ECR_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-#           docker pull "\$ECR_URI:latest"
-#           mkdir -p /home/ubuntu/taskmanager/env
-#           export ECR_IMAGE="\$ECR_URI"
-#           docker compose -f /home/ubuntu/taskmanager/docker-compose.prod.yml \
-#             up -d --remove-orphans
-#           sleep 15
-#           docker ps
-#         ENDSSH
+            echo "🔐 Authenticating Docker with ECR..."
+            aws ecr get-login-password --region "$AWS_REGION" | \
+              docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
-#     - name: Verify PROD Deployment
-#       run: |
-#         ssh -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST_PROD }} << 'EOF'
-#           if docker ps | grep -q "taskmanager_app"; then
-#             echo "✅ Flask container is running on PROD"
-#             docker logs taskmanager_app --tail=20
-#             sleep 5
-#             if curl -f --max-time 10 http://localhost:5000/health > /dev/null 2>&1; then
-#               echo "✅ App is responding on port 5000"
-#             else
-#               echo "⚠️  App may not be responding yet – check logs above"
-#             fi
-#           else
-#             echo "❌ Deployment failed – container not running"
-#             docker ps -a
-#             docker logs taskmanager_app --tail=50 || true
-#             exit 1
-#           fi
-#         EOF
+            echo "📥 Pulling image: $ECR_IMAGE"
+            docker pull "$ECR_IMAGE"
 
-#     - name: Deployment Summary
-#       run: |
-#         echo "🚀 PROD deployment successful!"
-#         echo "App:    http://${{ secrets.EC2_HOST_PROD }}:5000"
-#         echo "Health: http://${{ secrets.EC2_HOST_PROD }}:5000/health"
-#         echo "Image tag: ${{ needs.build-and-push.outputs.image_tag }}"
-#         echo "Deployed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-#         echo "Triggered by: ${{ github.actor }}"
+            echo "🚀 Restarting application..."
+            cd /home/ubuntu/taskmanager
+            ECR_IMAGE="$ECR_IMAGE" \
+              docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            sleep 15
+            docker ps
+          ENDSSH
+
+      - name: Verify PROD Deployment
+        run: |
+          ssh -i ~/.ssh/github-actions-key.pem \
+              -o StrictHostKeyChecking=no \
+              ubuntu@${{ secrets.EC2_HOST_PROD }} << 'EOF'
+            if docker ps | grep -q "taskmanager_app"; then
+              echo "✅ Flask container is running on PROD"
+              docker logs taskmanager_app --tail=20
+              sleep 5
+              if curl -f --max-time 10 http://localhost:5000/health > /dev/null 2>&1; then
+                echo "✅ Health check passed"
+              else
+                echo "⚠️  Health check not responding yet – review logs above"
+              fi
+            else
+              echo "❌ Deployment failed – container not running"
+              docker ps -a
+              docker logs taskmanager_app --tail=50 || true
+              exit 1
+            fi
+          EOF
+
+      - name: Deployment Summary
+        run: |
+          echo "🚀 PROD DEPLOYMENT SUCCESSFUL!"
+          echo "App:      http://${{ secrets.EC2_HOST_PROD }}:5000"
+          echo "Health:   http://${{ secrets.EC2_HOST_PROD }}:5000/health"
+          echo "Image:    ${{ needs.build-and-push.outputs.image_tag }}"
+          echo "Deployed: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "Actor:    ${{ github.actor }}"
+          echo "Commit:   ${{ github.sha }}"

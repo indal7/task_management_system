@@ -1,10 +1,18 @@
 version: '3.8'
 
+# Development docker-compose – local development with live-reload.
+# Usage (from project root):
+#   docker compose -f docker/docker-compose.dev.yml up
+#
+# The app source tree is bind-mounted into the container so edits are
+# reflected immediately without rebuilding the image.
+
 services:
   app:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.dev
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: development
     container_name: taskmanager_app_dev
     command: python app.py
     environment:
@@ -13,8 +21,12 @@ services:
       - FLASK_PORT=5000
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_URL=redis://redis:6379/0
+      - CACHE_REDIS_URL=redis://redis:6379/0
     env_file:
-      - ./env/.env.dev
+      - ../env/.env.dev
+    volumes:
+      - ..:/app  # live-reload: edits are reflected immediately
     ports:
       - "5000:5000"
     depends_on:
