@@ -5,8 +5,22 @@ Database Initialization Script
 This script initializes the database with tables and sample data.
 Run with: python scripts/init_db.py
 """
-# from app import create_app, db
-from app.models import User, Project, Task, TaskComment, Notification, Sprint
+import os
+import sys
+import json
+import random
+from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
+
+# Ensure the project root is on the Python path so 'app' is importable
+# regardless of which directory the script is run from.
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+# Load environment variables
+load_dotenv()
+
+from app import create_app, db
 from app.models.user import User
 from app.models.enums import TaskPriority, UserRole, TaskStatus, ProjectStatus, NotificationType, TaskType, SprintStatus
 from app.models.task import Task
@@ -16,29 +30,9 @@ from app.models.notification import Notification
 from app.models.sprint import Sprint
 from app.models.project_member import ProjectMember
 from app.models.time_log import TimeLog
-# from datetime import datetime, timedelta, UTC
-from datetime import datetime, timedelta, timezone
-# from werkzeug.security import generate_password_hash, check_password_hash
-
-import json
-import random
-import os
-import sys
-import json
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
-# Add project root to Python path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
-
-from app import create_app, db
+from app.models.activity_log import ActivityLog
+from app.models.task_attachment import TaskAttachment
 from config import DevelopmentConfig
-
-# from app.routes import register_all_routes
 
 def init_database():
     """Initialize database tables and create sample data."""
@@ -59,14 +53,9 @@ def init_database():
 
 def create_sample_data():
     """Create sample data for development."""
-    from app.models.user import User
-    from app.models.project import Project
-    from app.models.task import Task
-    from app.models.enums import UserRole, TaskStatus, TaskPriority, TaskType, ProjectStatus
-    
     print("📝 Creating sample data...")
-    
-        # ===== USERS =====
+
+    # ===== USERS =====
     try:
         print("👥 Creating users...")
         # Core team
@@ -840,6 +829,8 @@ def create_sample_data():
     sprint_count = db.session.query(Sprint).count()
     member_count = db.session.query(ProjectMember).count()
     timelog_count = db.session.query(TimeLog).count()
+    attachment_count = db.session.query(TaskAttachment).count()
+    activity_count = db.session.query(ActivityLog).count()
     
     print(f"👥 Users created: {user_count}")
     print(f"📁 Projects created: {project_count}")
@@ -849,6 +840,8 @@ def create_sample_data():
     print(f"🔔 Notifications created: {notification_count}")
     print(f"👥 Project members: {member_count}")
     print(f"⏰ Time logs created: {timelog_count}")
+    print(f"📎 Task attachments: {attachment_count}")
+    print(f"📜 Activity log entries: {activity_count}")
 
     print("\n" + "="*60)
     print("🔐 LOGIN CREDENTIALS")
