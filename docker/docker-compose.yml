@@ -1,7 +1,8 @@
 version: '3.8'
 
 # Development docker-compose (legacy alias – prefer docker-compose.dev.yml).
-# Usage: docker compose -f docker/docker-compose.yml up
+# Usage: docker compose -f docker/docker-compose.yml up  (from repo root)
+# Or:    cd docker && docker compose up
 
 services:
   app:

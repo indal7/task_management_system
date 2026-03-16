@@ -1,10 +1,12 @@
 name: CI – Lint & Test
 
+# Runs on every push to any branch and on PRs targeting develop or master.
+# This ensures all code is validated before it can be merged or deployed.
 on:
   push:
     branches: ["**"]
   pull_request:
-    branches: ["**"]
+    branches: [ develop, master ]
 
 # Restrict the GITHUB_TOKEN to the minimum required permissions.
 permissions:
