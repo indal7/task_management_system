@@ -2,14 +2,27 @@
 # Task Management System – Root Terraform Module
 #
 # Resources provisioned (ap-south-1 by default):
-#   Networking  : VPC · 2 public subnets · 2 private subnets · IGW · NAT GW
-#   Compute     : EC2 (Ubuntu 22.04, Docker + Docker Compose via user-data)
-#   Database    : RDS PostgreSQL 14 (private subnet)
-#   Cache       : ElastiCache Redis 7 (private subnet)
-#   Registry    : ECR repository for Docker images
-#   Secrets     : Secrets Manager entries for DB password + app secrets
-#   IAM         : EC2 instance profile (SSM, Secrets Manager, ECR)
+#   Networking    : VPC · 2 public subnets · 2 private subnets · IGW · NAT GW
+#   Compute       : EC2 (Ubuntu 22.04, Docker + Docker Compose via user-data)
+#   Database      : RDS PostgreSQL 14 (private subnet)
+#   Cache         : ElastiCache Redis 7 (private subnet)
+#   Registry      : ECR repository for Docker images
+#   Secrets       : Secrets Manager entries for DB password + app secrets
+#   IAM (EC2)     : EC2 instance profile (SSM, Secrets Manager scoped, ECR, CloudWatch)
+#   IAM (CI/CD)   : GitHub Actions IAM user with least-privilege ECR push policy
+#   State Backend : S3 bucket + DynamoDB table for remote Terraform state
 # ==============================================================================
+
+# ── Remote State Backend (bootstrap separately) ────────────────────────────────
+# Run once before the rest of the infrastructure:
+#   terraform apply -target=module.state_backend
+# Then uncomment the backend block in versions.tf and re-run terraform init.
+module "state_backend" {
+  source = "./modules/state_backend"
+
+  project_name = var.project_name
+  aws_region   = var.aws_region
+}
 
 # ── Networking ─────────────────────────────────────────────────────────────────
 module "networking" {
@@ -36,7 +49,7 @@ module "security_groups" {
   redis_port   = var.redis_port
 }
 
-# ── IAM ────────────────────────────────────────────────────────────────────────
+# ── IAM (EC2 instance role) ────────────────────────────────────────────────────
 module "iam" {
   source = "./modules/iam"
 
@@ -47,12 +60,23 @@ module "iam" {
 # ── ECR ────────────────────────────────────────────────────────────────────────
 module "ecr" {
   source = "./modules/ecr"
-  
+
   project_name         = var.project_name
   environment          = var.environment
   image_tag_mutability = var.ecr_image_tag_mutability
   max_image_count      = var.ecr_max_image_count
-  force_delete         = true  # ← ADD THIS
+  force_delete         = true
+}
+
+# ── IAM (GitHub Actions CI/CD user) ───────────────────────────────────────────
+module "iam_cicd" {
+  source = "./modules/iam_cicd"
+
+  project_name       = var.project_name
+  environment        = var.environment
+  ecr_repository_arn = module.ecr.repository_arn
+
+  depends_on = [module.ecr]
 }
 
 # ── Secrets Manager ────────────────────────────────────────────────────────────

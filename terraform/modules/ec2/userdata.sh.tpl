@@ -196,7 +196,7 @@ WAITED=0
 until curl -sf "$HEALTH_URL" >/dev/null 2>&1 || [ "$WAITED" -ge "$MAX_WAIT" ]; do
   sleep 5
   WAITED=$((WAITED + 5))
-  echo "[$(date)] Still waiting for app (${WAITED}s)…"
+  echo "[$(date)] Still waiting for app ($${WAITED}s)…"
 done
 
 if curl -sf "$HEALTH_URL" >/dev/null 2>&1; then

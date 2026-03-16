@@ -1,141 +1,176 @@
 # Task Management System – Terraform Infrastructure
 
-This directory contains all Terraform code needed to provision the AWS infrastructure
+This directory contains all Terraform code to provision the AWS infrastructure
 for the **Task Management System** Flask application.
 
 ## Architecture
 
 ```
-                  ┌──────────────────────────────┐
-                  │          ap-south-1            │
-                  │                                │
-                  │  ┌─── VPC (10.0.0.0/16) ────┐ │
-                  │  │                            │ │
-Internet ──[IGW]──┼──┤  Public Subnets            │ │
-                  │  │  ┌────────────────────┐   │ │
-                  │  │  │  EC2 (app server)  │   │ │
-                  │  │  │  + Elastic IP      │   │ │
-                  │  │  └────────────────────┘   │ │
-                  │  │           │ │              │ │
-                  │  │      [NAT GW]              │ │
-                  │  │           │                │ │
-                  │  │  Private Subnets           │ │
-                  │  │  ┌──────────┐ ┌─────────┐ │ │
-                  │  │  │   RDS    │ │  Redis  │ │ │
-                  │  │  │ Postgres │ │ (Cache) │ │ │
-                  │  │  └──────────┘ └─────────┘ │ │
-                  │  └────────────────────────────┘ │
-                  │                                  │
-                  │  ECR  ·  Secrets Manager  ·  IAM │
-                  └──────────────────────────────────┘
+                  ┌──────────────────────────────────────────┐
+                  │               ap-south-1                  │
+                  │                                           │
+                  │  ┌─── VPC (10.0.0.0/16) ──────────────┐  │
+                  │  │                                      │  │
+Internet ──[IGW]──┼──┤  Public Subnets                     │  │
+                  │  │  ┌────────────────────────────────┐  │  │
+                  │  │  │  EC2 (app server) + Elastic IP │  │  │
+                  │  │  └────────────────────────────────┘  │  │
+                  │  │                                      │  │
+                  │  │  Private Subnets (no internet egress)│  │
+                  │  │  ┌──────────────┐ ┌──────────────┐  │  │
+                  │  │  │  RDS Postgres│ │ Redis Cache  │  │  │
+                  │  │  └──────────────┘ └──────────────┘  │  │
+                  │  └──────────────────────────────────────┘  │
+                  │                                            │
+                  │  ECR · Secrets Manager · IAM · S3/DynamoDB│
+                  └────────────────────────────────────────────┘
 ```
 
 ## Resources Created
 
 | Module | Resources |
 |--------|-----------|
-| `networking` | VPC, 2 public subnets, 2 private subnets, IGW, NAT GW, Elastic IP (NAT), route tables |
-| `security_groups` | EC2 SG (22, 80, 443, 5000), RDS SG (5432 from EC2), Redis SG (6379 from EC2) |
-| `iam` | EC2 IAM role + instance profile (SSM, Secrets Manager, ECR, CloudWatch) |
-| `ecr` | ECR repository + lifecycle policy (keep last N images) |
+| `networking` | VPC, 2 public subnets, 2 private subnets, IGW, (optional NAT GW), route tables |
+| `security_groups` | EC2 SG (22, 80, 443, 5000), RDS SG (5432 from EC2 only), Redis SG (6379 from EC2 only) |
+| `iam` | EC2 IAM role + instance profile (SSM, scoped Secrets Manager read, ECR read, CloudWatch) |
+| `iam_cicd` | GitHub Actions IAM user + least-privilege ECR push policy + access key in Secrets Manager |
+| `ecr` | ECR repository + lifecycle policy (expire untagged after 1 day, keep last N tagged) |
 | `secrets` | Secrets Manager entries: DB password, Flask SECRET_KEY, JWT_SECRET_KEY |
 | `rds` | RDS PostgreSQL 14, subnet group, parameter group (slow query logging) |
 | `elasticache` | ElastiCache Redis 7, subnet group, parameter group |
 | `ec2` | EC2 Ubuntu 22.04, key pair, Elastic IP, user-data bootstrap script |
+| `state_backend` | S3 bucket (versioned + encrypted) + DynamoDB table for remote Terraform state |
 
 ## Prerequisites
 
 1. [Terraform ≥ 1.6](https://developer.hashicorp.com/terraform/install)
 2. [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) configured with credentials
-3. An SSH key pair (for EC2 access): `ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa`
-4. Docker installed locally (for building and pushing images to ECR)
+3. An SSH key pair for EC2 access: `ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa`
 
 ## Quick Start
 
-### 1. Clone and configure
+### 1. Configure variables
 
 ```bash
 cd terraform/
 
 # Copy the example var file
 cp terraform.tfvars.example terraform.tfvars
-
-# Edit terraform.tfvars – at minimum set:
-#   app_secret_key, app_jwt_secret_key, admin_cidr
+# Edit terraform.tfvars – set app_secret_key, app_jwt_secret_key, admin_cidr
 ```
 
-Or use environment variables for secrets (recommended):
+Or use environment variables for secrets (recommended – avoids committing secrets):
 
 ```bash
 export TF_VAR_app_secret_key=$(python -c "import secrets; print(secrets.token_hex(32))")
 export TF_VAR_app_jwt_secret_key=$(python -c "import secrets; print(secrets.token_hex(32))")
 ```
 
-### 2. Initialise Terraform
+### 2. Bootstrap the remote state backend (once per AWS account)
 
 ```bash
-terraform init
+terraform init -backend=false
+terraform apply -target=module.state_backend
 ```
 
-### 3. Plan changes
+Copy the `state_bucket_name` output, uncomment the `backend "s3"` block in
+`versions.tf`, then migrate state:
+
+```bash
+terraform init   # Terraform will prompt to migrate local state to S3
+```
+
+### 3. Plan and apply
 
 ```bash
 # Dev environment
-terraform plan -var-file=environments/dev/terraform.tfvars
+terraform plan  -var-file=environments/dev/terraform.tfvars
+terraform apply -var-file=environments/dev/terraform.tfvars
 
 # Production environment
-terraform plan -var-file=environments/prod/terraform.tfvars
+terraform plan  -var-file=environments/prod/terraform.tfvars
+terraform apply -var-file=environments/prod/terraform.tfvars
 ```
 
-### 4. Apply
+### 4. Configure GitHub Actions secrets
+
+After `apply` the `github_secrets_setup` output lists all secrets to configure:
 
 ```bash
-terraform apply -var-file=environments/dev/terraform.tfvars
+terraform output github_secrets_setup
 ```
 
-### 5. Build and push the Docker image
+Set the following in **Settings → Secrets and variables → Actions**:
 
-After `apply` completes, the outputs include the ECR push commands:
+| Secret | Source |
+|--------|--------|
+| `AWS_ACCESS_KEY_ID` | `terraform output -raw cicd_access_key_id` (dev apply) |
+| `AWS_SECRET_ACCESS_KEY` | `terraform output -raw cicd_secret_access_key` (dev apply) |
+| `AWS_REGION` | `ap-south-1` |
+| `ECR_REPOSITORY_DEV` | `terraform output -raw ecr_repository_name` (dev apply) |
+| `EC2_HOST_DEV` | `terraform output -raw ec2_public_ip` (dev apply) |
+| `EC2_KEY_DEV` | Contents of your SSH private key |
+| `AWS_ACCESS_KEY_ID_PROD` | `terraform output -raw cicd_access_key_id` (prod apply) |
+| `AWS_SECRET_ACCESS_KEY_PROD` | `terraform output -raw cicd_secret_access_key` (prod apply) |
+| `AWS_REGION_PROD` | `ap-south-1` |
+| `ECR_REPOSITORY_PROD` | `terraform output -raw ecr_repository_name` (prod apply) |
+| `EC2_HOST_PROD` | `terraform output -raw ec2_public_ip` (prod apply) |
+| `EC2_KEY_PROD` | Contents of your SSH private key |
+
+### 5. Push your first Docker image
 
 ```bash
 terraform output ecr_push_commands
 ```
 
-Run those commands to push your first image:
-
-```bash
-# From the repository root
-aws ecr get-login-password --region ap-south-1 | \
-  docker login --username AWS --password-stdin <ecr_repo_url>
-
-docker build -f docker/Dockerfile -t <ecr_repo_url>:latest .
-docker push <ecr_repo_url>:latest
-```
-
-### 6. Run database migrations
-
-SSH into the EC2 instance and run migrations:
-
-```bash
-ssh -i ~/.ssh/id_rsa ubuntu@$(terraform output -raw ec2_public_ip)
-
-# Inside the instance
-cd /home/ubuntu/taskmanager
-docker exec taskmanager_app flask db upgrade
-```
-
-### 7. Verify
+### 6. Verify
 
 ```bash
 curl $(terraform output -raw health_url)
 # → {"status": "healthy", "service": "task-management-api"}
 ```
 
-## Using Remote State (recommended for teams)
+## Environment Differences
 
-1. Create an S3 bucket and DynamoDB table for state locking.
-2. Uncomment the `backend "s3"` block in `versions.tf` and fill in the bucket name.
-3. Re-run `terraform init` to migrate local state to S3.
+| Setting | Dev | Prod |
+|---------|-----|------|
+| EC2 instance type | `t3.small` | `t3.medium` |
+| RDS instance class | `db.t3.micro` | `db.t3.small` |
+| NAT Gateway | ❌ disabled (saves ~$32/month) | ✅ enabled |
+| RDS Multi-AZ | ❌ | ✅ |
+| RDS deletion protection | ❌ | ✅ |
+| RDS final snapshot | skipped | taken |
+| RDS backup retention | 7 days | 30 days |
+| SSH CIDR (`admin_cidr`) | `0.0.0.0/0` | restricted to office/VPN |
+
+## Module Reference
+
+### `modules/iam`
+
+EC2 instance role. Uses a **least-privilege inline Secrets Manager policy** scoped
+to `${project_name}/${environment}/*` instead of the broad `SecretsManagerReadWrite`
+managed policy.
+
+### `modules/iam_cicd`
+
+Dedicated IAM user for GitHub Actions CI/CD. Permissions:
+- `ecr:GetAuthorizationToken` (account-level – required by ECR)
+- ECR push actions scoped to only the project's ECR repository
+- `sts:GetCallerIdentity` (used by `aws-actions/configure-aws-credentials`)
+
+The generated access key is stored in Secrets Manager for safe retrieval and rotation.
+
+### `modules/ecr`
+
+ECR repository with a two-rule lifecycle policy:
+1. Expire **untagged** images after **1 day** (cleans up push intermediaries)
+2. Keep the **N most recent tagged** images (configurable via `ecr_max_image_count`)
+
+### `modules/state_backend`
+
+S3 bucket (versioned + AES-256 encrypted, public access blocked) and DynamoDB
+table for Terraform state locking. Apply this module **before** enabling the S3
+backend in `versions.tf`.
 
 ## Destroying Resources
 
@@ -144,63 +179,4 @@ terraform destroy -var-file=environments/dev/terraform.tfvars
 ```
 
 > ⚠️ In production set `rds_deletion_protection = true` and
-> `rds_skip_final_snapshot = false` to protect data.
-
-## Module Reference
-
-### `modules/networking`
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `vpc_cidr` | `10.0.0.0/16` | VPC CIDR |
-| `public_subnet_cidrs` | `["10.0.1.0/24","10.0.2.0/24"]` | Two public subnets |
-| `private_subnet_cidrs` | `["10.0.11.0/24","10.0.12.0/24"]` | Two private subnets |
-| `availability_zones` | `["ap-south-1a","ap-south-1b"]` | AZs |
-| `enable_nat_gateway` | `true` | Create NAT GW for private subnet egress |
-
-### `modules/security_groups`
-
-Manages three security groups: `ec2`, `rds`, `redis`.
-RDS and Redis SGs only allow inbound from the EC2 SG.
-
-### `modules/rds`
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `engine_version` | `14.17` | PostgreSQL version |
-| `instance_class` | `db.t3.micro` | RDS instance size |
-| `multi_az` | `false` | Enable Multi-AZ standby |
-| `deletion_protection` | `false` | Protect from accidental deletion |
-
-### `modules/elasticache`
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `engine_version` | `7.1` | Redis version |
-| `node_type` | `cache.t3.micro` | Cache node size |
-
-### `modules/ec2`
-
-The EC2 user-data script (`userdata.sh.tpl`) automatically:
-1. Installs Docker and Docker Compose
-2. Fetches secrets from AWS Secrets Manager
-3. Writes `/home/ubuntu/taskmanager/env/.env.prod`
-4. Pulls the latest image from ECR
-5. Starts the application with `docker compose`
-6. Installs a `systemd` service for auto-restart on reboot
-
-## Environment Variables Injected by Terraform
-
-The following environment variables are written to `.env.prod` by the user-data script
-and consumed by the Flask application (`config/production.py`):
-
-| Variable | Source |
-|----------|--------|
-| `DATABASE_URL` | Built from RDS endpoint + Secrets Manager password |
-| `REDIS_URL` | ElastiCache endpoint |
-| `CACHE_REDIS_URL` | ElastiCache endpoint (DB 1) |
-| `SECRET_KEY` | Secrets Manager |
-| `JWT_SECRET_KEY` | Secrets Manager |
-| `FLASK_ENV` | `production` |
-| `LOG_LEVEL` | `INFO` |
-| `RATELIMIT_ENABLED` | `true` |
+> `rds_skip_final_snapshot = false` to protect data before destroying.

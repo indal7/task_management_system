@@ -1,10 +1,21 @@
 name: Dev Deploy
 
+# Auto-deploys on every push to the `develop` branch.
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#   AWS_ACCESS_KEY_ID     – IAM access key with ECR push + EC2 permissions
+#   AWS_SECRET_ACCESS_KEY – Matching secret key
+#   AWS_REGION            – e.g. ap-south-1  (defaults to ap-south-1 if omitted)
+#   ECR_REPOSITORY_DEV    – ECR repository name, e.g. taskmanager-dev
+#   EC2_HOST_DEV          – Public IP / hostname of the dev EC2 instance
+#   EC2_KEY_DEV           – Private SSH key for the dev EC2 instance
+
 on:
   push:
-    branches: [ master ]
+    branches: [ develop ]
 
 jobs:
+  # ── Build & Push Docker image to ECR (dev) ────────────────────────────────
   build-and-push:
     name: Build & Push to ECR (dev)
     runs-on: ubuntu-latest
@@ -13,42 +24,49 @@ jobs:
       id-token: write
 
     outputs:
-      image_tag: ${{ steps.image_tag.outputs.tag }}
+      image_tag: ${{ steps.meta.outputs.version }}
+      ecr_registry: ${{ steps.login-ecr.outputs.registry }}
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION || 'ap-south-1' }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-1' }}
 
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-    - name: Generate image tag
-      id: image_tag
-      run: echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Generate image metadata (tags & labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_DEV || 'taskmanager-dev' }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=dev-latest
 
-    - name: Build, tag, and push image to ECR (dev)
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY: taskmanager-dev
-        IMAGE_TAG: ${{ steps.image_tag.outputs.tag }}
-      run: |
-        ECR_URI="$ECR_REGISTRY/$ECR_REPOSITORY"
-        docker build -f docker/Dockerfile.dev \
-          -t "$ECR_URI:$IMAGE_TAG" \
-          -t "$ECR_URI:latest" \
-          .
-        docker push "$ECR_URI:$IMAGE_TAG"
-        docker push "$ECR_URI:latest"
-        echo "✅ Pushed $ECR_URI:$IMAGE_TAG"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
+      - name: Build and push image to ECR (dev)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=prod
+          cache-to: type=gha,mode=max,scope=prod
+
+  # ── Deploy to DEV EC2 ─────────────────────────────────────────────────────
   deploy:
     name: Deploy to DEV EC2
     runs-on: ubuntu-latest
@@ -57,130 +75,94 @@ jobs:
       contents: read
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Add SSH Key
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.EC2_KEY_DEV }}" > ~/.ssh/github-actions-key.pem
-        chmod 600 ~/.ssh/github-actions-key.pem
-        ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts 2>/dev/null || true
-        ssh -i ~/.ssh/github-actions-key.pem \
-            -o ConnectTimeout=30 \
-            -o StrictHostKeyChecking=no \
-            ubuntu@${{ secrets.EC2_HOST_DEV }} \
-            "echo '✅ SSH connection successful - $(date)'"
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_KEY_DEV }}" > ~/.ssh/github-actions-key.pem
+          chmod 600 ~/.ssh/github-actions-key.pem
+          ssh-keyscan -H "${{ secrets.EC2_HOST_DEV }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh -i ~/.ssh/github-actions-key.pem \
+              -o ConnectTimeout=30 \
+              -o StrictHostKeyChecking=no \
+              ubuntu@${{ secrets.EC2_HOST_DEV }} \
+              "echo '✅ SSH connection successful'"
 
-    - name: Copy source code to DEV EC2
-      run: |
-        ssh -i ~/.ssh/github-actions-key.pem \
-            -o StrictHostKeyChecking=no \
-            ubuntu@${{ secrets.EC2_HOST_DEV }} \
-            "sudo mkdir -p /home/ubuntu/taskmanager && sudo chown -R ubuntu:ubuntu /home/ubuntu/taskmanager"
-        
-        scp -i ~/.ssh/github-actions-key.pem \
-            -o StrictHostKeyChecking=no \
-            -r . \
-            ubuntu@${{ secrets.EC2_HOST_DEV }}:/home/ubuntu/taskmanager/
-        
-        echo "✅ Source code copied to DEV EC2"
+      - name: Copy docker-compose file to DEV EC2
+        run: |
+          ssh -i ~/.ssh/github-actions-key.pem \
+              -o StrictHostKeyChecking=no \
+              ubuntu@${{ secrets.EC2_HOST_DEV }} \
+              "mkdir -p /home/ubuntu/taskmanager/env"
+          scp -i ~/.ssh/github-actions-key.pem \
+              -o StrictHostKeyChecking=no \
+              docker/docker-compose.prod.yml \
+              ubuntu@${{ secrets.EC2_HOST_DEV }}:/home/ubuntu/taskmanager/docker-compose.prod.yml
+          echo "✅ docker-compose.prod.yml copied to DEV EC2"
 
-    - name: Create .env.dev file on DEV EC2
-      run: |
-        ssh -T -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST_DEV }} << 'ENDSSH'
-          set -e
-          mkdir -p /home/ubuntu/taskmanager/env
-          
-          cat > /home/ubuntu/taskmanager/env/.env.dev << 'ENVEOF'
-        FLASK_ENV=development
-        FLASK_HOST=0.0.0.0
-        FLASK_PORT=5000
-        FLASK_DEBUG=true
+      - name: Pull latest image and restart on DEV EC2
+        env:
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
+          ECR_REGISTRY: ${{ needs.build-and-push.outputs.ecr_registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_DEV || 'taskmanager-dev' }}
+        run: |
+          ssh -T -i ~/.ssh/github-actions-key.pem \
+              -o StrictHostKeyChecking=no \
+              ubuntu@${{ secrets.EC2_HOST_DEV }} \
+              bash -s -- "$ECR_REGISTRY" "$ECR_REPOSITORY" "$IMAGE_TAG" "$AWS_REGION" << 'ENDSSH'
+            set -e
+            ECR_REGISTRY="$1"
+            ECR_REPOSITORY="$2"
+            IMAGE_TAG="$3"
+            AWS_REGION="$4"
+            ECR_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-        REDIS_HOST=redis
-        REDIS_PORT=6379
-        REDIS_URL=redis://redis:6379/0
-        CACHE_REDIS_URL=redis://redis:6379/1
-        CACHE_TYPE=RedisCache
-        CACHE_DEFAULT_TIMEOUT=300
+            echo "🔐 Authenticating Docker with ECR..."
+            aws ecr get-login-password --region "$AWS_REGION" | \
+              docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
-        SECRET_KEY=dev-secret-key-change-in-production
-        JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
-        JWT_ACCESS_TOKEN_EXPIRES=3600
+            echo "📥 Pulling image: $ECR_IMAGE"
+            docker pull "$ECR_IMAGE"
 
-        LOG_LEVEL=DEBUG
-        LOG_TO_STDOUT=true
+            echo "🚀 Restarting application..."
+            cd /home/ubuntu/taskmanager
+            ECR_IMAGE="$ECR_IMAGE" \
+              docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
-        RATELIMIT_ENABLED=false
-        ENVEOF
+            sleep 15
+            docker ps
+          ENDSSH
 
-          chmod 600 /home/ubuntu/taskmanager/env/.env.dev
-          echo "✅ .env.dev created successfully"
-        ENDSSH
-
-    - name: Pull latest image and restart containers on DEV EC2
-      env:
-        IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
-        AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        ECR_REPOSITORY: taskmanager-dev
-        EC2_HOST: ${{ secrets.EC2_HOST_DEV }}
-      run: |
-        ssh -T -i ~/.ssh/github-actions-key.pem ubuntu@$EC2_HOST << ENDSSH
-          set -e
-          
-          export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
-          export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
-          export AWS_REGION="$AWS_REGION"
-          export ECR_REPOSITORY="$ECR_REPOSITORY"
-          
-          echo "🔍 Testing AWS credentials..."
-          ACCOUNT_ID=\$(aws sts get-caller-identity --query Account --output text)
-          echo "✅ AWS Account ID retrieved: \$ACCOUNT_ID"
-          
-          ECR_REGISTRY="\$ACCOUNT_ID.dkr.ecr.\$AWS_REGION.amazonaws.com"
-          ECR_URI="\$ECR_REGISTRY/\$ECR_REPOSITORY"
-
-          echo "🔐 Authenticating Docker with ECR..."
-          aws ecr get-login-password --region \$AWS_REGION | \
-            docker login --username AWS --password-stdin "\$ECR_REGISTRY"
-
-          echo "📥 Pulling latest image..."
-          docker pull "\$ECR_URI:latest"
-          
-          echo "📂 Navigating to /home/ubuntu/taskmanager"
-          cd /home/ubuntu/taskmanager
-          
-          echo "🚀 Starting Docker containers..."
-          docker compose -f docker-compose.dev.yml up -d --remove-orphans
-          
-          sleep 15
-          docker ps
-        ENDSSH
-
-    - name: Verify DEV Deployment
-      run: |
-        ssh -i ~/.ssh/github-actions-key.pem ubuntu@${{ secrets.EC2_HOST_DEV }} << 'EOF'
-          if docker ps | grep -q "taskmanager_app_dev"; then
-            echo "✅ Flask dev container is running"
-            docker logs taskmanager_app_dev --tail=20
-            sleep 5
-            if curl -f --max-time 10 http://localhost:5000/health > /dev/null 2>&1; then
-              echo "✅ App is responding on port 5000 ✓"
+      - name: Verify DEV Deployment
+        run: |
+          ssh -i ~/.ssh/github-actions-key.pem \
+              -o StrictHostKeyChecking=no \
+              ubuntu@${{ secrets.EC2_HOST_DEV }} << 'EOF'
+            if docker ps | grep -q "taskmanager_app"; then
+              echo "✅ Flask container is running"
+              docker logs taskmanager_app --tail=20
+              sleep 5
+              if curl -f --max-time 10 http://localhost:5000/health > /dev/null 2>&1; then
+                echo "✅ Health check passed"
+              else
+                echo "⚠️  Health check not responding yet – review logs above"
+              fi
             else
-              echo "⚠️  App may not be responding yet"
+              echo "❌ Deployment failed – container not running"
+              docker ps -a
+              docker logs taskmanager_app --tail=50 || true
+              exit 1
             fi
-          else
-            echo "❌ Deployment failed"
-            docker ps -a
-            exit 1
-          fi
-        EOF
+          EOF
 
-    - name: Notify DEV Deployment Success
-      run: |
-        echo "🎉 DEV DEPLOYMENT SUCCESSFUL!"
-        echo "App:    http://${{ secrets.EC2_HOST_DEV }}:5000"
-        echo "Health: http://${{ secrets.EC2_HOST_DEV }}:5000/health"
+      - name: Notify DEV Deployment Success
+        run: |
+          echo "🎉 DEV DEPLOYMENT SUCCESSFUL!"
+          echo "App:      http://${{ secrets.EC2_HOST_DEV }}:5000"
+          echo "Health:   http://${{ secrets.EC2_HOST_DEV }}:5000/health"
+          echo "Image:    ${{ needs.build-and-push.outputs.image_tag }}"
+          echo "Deployed: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "Actor:    ${{ github.actor }}"

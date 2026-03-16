@@ -1,15 +1,17 @@
 version: '3.8'
 
 # Production docker-compose – deployed on EC2.
-# The application image is pulled from ECR (set ECR_IMAGE before running).
-# Usage (EC2): ECR_IMAGE=<ecr-uri> docker compose -f docker-compose.prod.yml up -d
 #
-# On EC2 this file lives at /home/ubuntu/taskmanager/docker-compose.prod.yml
+# The application image is pulled from ECR; set ECR_IMAGE to the full URI
+# (including tag) before running, e.g.:
+#   export ECR_IMAGE=123456789.dkr.ecr.ap-south-1.amazonaws.com/taskmanager-prod:abc1234
+#   docker compose -f docker/docker-compose.prod.yml up -d
+#
+# On EC2 this file is copied to /home/ubuntu/taskmanager/docker-compose.prod.yml
 # with env/.env.prod in the same directory.
 #
-# Redis / Cache: Production uses AWS ElastiCache. Set REDIS_URL and
+# Redis / Cache: Production uses AWS ElastiCache. Configure REDIS_URL and
 # CACHE_REDIS_URL in env/.env.prod to point at your ElastiCache endpoint.
-# No local Redis container is needed here.
 
 services:
   app:
