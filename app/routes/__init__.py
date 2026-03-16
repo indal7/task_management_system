@@ -12,6 +12,12 @@ from app.routes.analytics_routes import analytics_bp
 from app.routes.sprint_routes import sprint_bp
 from app.routes.enum_routes import enum_bp
 from app.routes.cache_routes import cache_bp
+from app.routes.user_routes import user_bp
+from app.routes.member_routes import member_bp
+from app.routes.attachment_routes import attachment_bp
+from app.routes.search_routes import search_bp
+from app.routes.activity_routes import activity_bp
+from app.routes.bulk_routes import bulk_bp
 
 logger = logging.getLogger('app.api')
 
@@ -28,6 +34,12 @@ def register_blueprints(app: Flask):
         analytics_bp,
         enum_bp,
         cache_bp,
+        user_bp,
+        member_bp,
+        attachment_bp,
+        search_bp,
+        activity_bp,
+        bulk_bp,
     ]
 
     for blueprint in blueprints:
