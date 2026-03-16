@@ -77,6 +77,11 @@ output "ecr_repository_url" {
   value       = module.ecr.repository_url
 }
 
+output "ecr_repository_name" {
+  description = "ECR repository name (e.g. taskmanager-dev). Set as ECR_REPOSITORY_DEV or ECR_REPOSITORY_PROD GitHub Secret."
+  value       = module.ecr.repository_name
+}
+
 output "ecr_push_commands" {
   description = "Commands to authenticate and push a Docker image to ECR."
   value       = <<-EOT
@@ -85,7 +90,7 @@ output "ecr_push_commands" {
       docker login --username AWS --password-stdin ${module.ecr.repository_url}
 
     # Build and push:
-    docker build -f docker/Dockerfile -t ${module.ecr.repository_url}:latest .
+    docker build --target production -f docker/Dockerfile -t ${module.ecr.repository_url}:latest .
     docker push ${module.ecr.repository_url}:latest
   EOT
 }
@@ -112,4 +117,61 @@ output "jwt_secret_arn" {
 output "database_url_template" {
   description = "DATABASE_URL template (replace <password> with the value from Secrets Manager)."
   value       = "postgresql://${var.rds_username}:<password>@${module.rds.db_endpoint}/${var.rds_db_name}?sslmode=require"
+}
+
+# ── CI/CD IAM ─────────────────────────────────────────────────────────────────
+output "cicd_user_arn" {
+  description = "ARN of the GitHub Actions IAM user."
+  value       = module.iam_cicd.cicd_user_arn
+}
+
+output "cicd_access_key_id" {
+  description = "AWS Access Key ID for GitHub Actions. Set as AWS_ACCESS_KEY_ID (dev) or AWS_ACCESS_KEY_ID_PROD (prod) GitHub Secret."
+  value       = module.iam_cicd.cicd_access_key_id
+  sensitive   = true
+}
+
+output "cicd_secret_access_key" {
+  description = "AWS Secret Access Key for GitHub Actions. Set as AWS_SECRET_ACCESS_KEY (dev) or AWS_SECRET_ACCESS_KEY_PROD (prod) GitHub Secret."
+  value       = module.iam_cicd.cicd_secret_access_key
+  sensitive   = true
+}
+
+output "cicd_credentials_secret_arn" {
+  description = "Secrets Manager ARN where the CI/CD access key is stored."
+  value       = module.iam_cicd.cicd_credentials_secret_arn
+}
+
+output "github_secrets_setup" {
+  description = "Summary of GitHub Secrets to configure from Terraform outputs."
+  value       = <<-EOT
+    Set the following GitHub repository secrets (Settings → Secrets and variables → Actions):
+
+    For dev-deploy.yml (develop branch):
+      AWS_ACCESS_KEY_ID     = $(terraform output -raw cicd_access_key_id)
+      AWS_SECRET_ACCESS_KEY = $(terraform output -raw cicd_secret_access_key)
+      AWS_REGION            = ${var.aws_region}
+      ECR_REPOSITORY_DEV    = $(terraform output -raw ecr_repository_name)
+      EC2_HOST_DEV          = $(terraform output -raw ec2_public_ip)
+      EC2_KEY_DEV           = <contents of your SSH private key>
+
+    For prod-deploy.yml (master branch, production environment):
+      AWS_ACCESS_KEY_ID_PROD     = $(terraform output -raw cicd_access_key_id)
+      AWS_SECRET_ACCESS_KEY_PROD = $(terraform output -raw cicd_secret_access_key)
+      AWS_REGION_PROD            = ${var.aws_region}
+      ECR_REPOSITORY_PROD        = $(terraform output -raw ecr_repository_name)
+      EC2_HOST_PROD              = $(terraform output -raw ec2_public_ip)
+      EC2_KEY_PROD               = <contents of your SSH private key>
+  EOT
+}
+
+# ── Remote State Backend ───────────────────────────────────────────────────────
+output "state_bucket_name" {
+  description = "S3 bucket name for Terraform remote state."
+  value       = module.state_backend.state_bucket_name
+}
+
+output "state_lock_table" {
+  description = "DynamoDB table name for Terraform state locking."
+  value       = module.state_backend.lock_table_name
 }

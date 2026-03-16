@@ -28,8 +28,6 @@ locals {
     redis_port             = var.redis_port
     app_secret_arn         = var.app_secret_arn
     jwt_secret_arn         = var.jwt_secret_arn
-    WAITED                 = ""  # <-- Ensure this line is present
-    MAX_WAIT               = ""  # <-- Add this line for the new error
   })
 }
 

@@ -12,7 +12,7 @@ vpc_cidr             = "10.0.0.0/16"
 public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
 private_subnet_cidrs = ["10.0.11.0/24", "10.0.12.0/24"]
 availability_zones   = ["ap-south-1a", "ap-south-1b"]
-enable_nat_gateway   = true
+enable_nat_gateway   = false             # Private resources don't need internet egress; saves ~$32/month
 
 # ── EC2 ────────────────────────────────────────────────────────────────────────
 ec2_ami_id          = "ami-0f58b397bc5c1f2e8"   # Ubuntu 22.04 LTS (ap-south-1)
@@ -46,6 +46,8 @@ ecr_max_image_count      = 10
 
 # ── Secrets (SENSITIVE – never commit real values) ─────────────────────────────
 # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
-
-app_secret_key     = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6"
-app_jwt_secret_key = "z9y8x7w6v5u4t3s2r1q0p9o8n7m6l5k4j3i2h1g0f9e8d7c6b5a4"
+# Set via environment variables instead of committing to version control:
+#   export TF_VAR_app_secret_key=$(python -c "import secrets; print(secrets.token_hex(32))")
+#   export TF_VAR_app_jwt_secret_key=$(python -c "import secrets; print(secrets.token_hex(32))")
+app_secret_key     = "REPLACE_WITH_A_STRONG_RANDOM_SECRET"
+app_jwt_secret_key = "REPLACE_WITH_A_DIFFERENT_STRONG_SECRET"

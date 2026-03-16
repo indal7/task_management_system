@@ -218,6 +218,9 @@ redis_data/
 pgadmin_data/
 
 # Terraform state and local config
+terraform.tfstate
+terraform.tfstate.*
+terraform.tfstate.backup
 terraform/.terraform/
 terraform/.terraform.lock.hcl
 terraform/*.tfstate
