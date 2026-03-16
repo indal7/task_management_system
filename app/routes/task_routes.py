@@ -37,9 +37,12 @@ def create():
         data['user_id'] = user_id
         result = TaskService.create_task(data, user_id)
 
-        if isinstance(result, tuple) and len(result) == 2 and 'error' in result[0]:
-            logger.warning(f"Task creation failed for user {user_id}: {result[0]['error']}")
-            return error_response(result[0]['error'], status_code=result[1])
+        if isinstance(result, tuple) and len(result) == 2:
+            task_data, status_code = result
+            if status_code != 201:
+                logger.warning(f"Task creation failed for user {user_id}: {task_data.get('error')}")
+                return error_response(task_data.get('error', 'Task creation failed'), status_code=status_code)
+            result = task_data
 
         logger.info(f"Task created successfully by user {user_id}")
         return created_response("Task created successfully", result)
