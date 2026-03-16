@@ -1,8 +1,18 @@
 name: Dev Deploy
 
+# Triggers on every push to the develop branch.
+# Automatically builds a dev Docker image, pushes to ECR, and deploys to the DEV EC2 instance.
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#   AWS_ACCESS_KEY_ID       – IAM user access key with ECR + EC2 permissions
+#   AWS_SECRET_ACCESS_KEY   – Matching secret key
+#   AWS_REGION              – e.g. ap-south-1 (defaults to ap-south-1 if omitted)
+#   EC2_HOST_DEV            – Public IP / hostname of the dev EC2 instance
+#   EC2_KEY_DEV             – Private SSH key to reach the dev EC2 instance
+
 on:
   push:
-    branches: [ master ]
+    branches: [ develop ]
 
 jobs:
   build-and-push:
@@ -154,7 +164,7 @@ jobs:
           cd /home/ubuntu/taskmanager
           
           echo "🚀 Starting Docker containers..."
-          docker compose -f docker-compose.dev.yml up -d --remove-orphans
+          docker compose -f docker/docker-compose.dev.yml up -d --remove-orphans
           
           sleep 15
           docker ps
@@ -182,5 +192,8 @@ jobs:
     - name: Notify DEV Deployment Success
       run: |
         echo "🎉 DEV DEPLOYMENT SUCCESSFUL!"
-        echo "App:    http://${{ secrets.EC2_HOST_DEV }}:5000"
-        echo "Health: http://${{ secrets.EC2_HOST_DEV }}:5000/health"
+        echo "Branch:  develop"
+        echo "Commit:  ${{ github.sha }}"
+        echo "App:     http://${{ secrets.EC2_HOST_DEV }}:5000"
+        echo "Health:  http://${{ secrets.EC2_HOST_DEV }}:5000/health"
+        echo "Tag:     ${{ needs.build-and-push.outputs.image_tag }}"

@@ -1,9 +1,13 @@
 version: '3.8'
 
+# Development docker-compose.
+# Usage (from repo root): docker compose -f docker/docker-compose.dev.yml up --build
+# Usage (from docker/ dir): docker compose up --build
+
 services:
   app:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile.dev
     container_name: taskmanager_app_dev
     command: python app.py
@@ -14,7 +18,9 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     env_file:
-      - ./env/.env.dev
+      - ../env/.env.dev
+    volumes:
+      - ..:/app   # hot-reload: source changes are reflected without rebuild
     ports:
       - "5000:5000"
     depends_on:
