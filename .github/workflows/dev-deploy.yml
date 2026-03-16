@@ -113,22 +113,26 @@ jobs:
         run: |
           ssh -T -i ~/.ssh/github-actions-key.pem \
               -o StrictHostKeyChecking=no \
-              ubuntu@${{ secrets.EC2_HOST_DEV }} \
-              bash -s -- "$ECR_REGISTRY" "$ECR_REPOSITORY" "$IMAGE_TAG" "$AWS_REGION" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" << 'ENDSSH'
+              -o "SendEnv AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION" \
+              ubuntu@${{ secrets.EC2_HOST_DEV }} << 'ENDSSH'
             set -e
-            ECR_REGISTRY="$1"
-            ECR_REPOSITORY="$2"
-            IMAGE_TAG="$3"
-            AWS_REGION="$4"
-            AWS_ACCESS_KEY_ID="$5"
-            AWS_SECRET_ACCESS_KEY="$6"
+            ECR_REGISTRY="${{ needs.build-and-push.outputs.ecr_registry }}"
+            ECR_REPOSITORY="${{ secrets.ECR_REPOSITORY_DEV || 'taskmanager-dev' }}"
+            IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
             ECR_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
             echo "🔐 Authenticating Docker with ECR..."
-            # Export AWS credentials for the session
-            export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
-            export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
-            export AWS_REGION="$AWS_REGION"
+            echo "AWS_REGION: $AWS_REGION"
+            
+            # Verify credentials are present
+            if [ -z "$AWS_ACCESS_KEY_ID" ]; then
+              echo "❌ AWS_ACCESS_KEY_ID is empty"
+              exit 1
+            fi
+            if [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+              echo "❌ AWS_SECRET_ACCESS_KEY is empty"
+              exit 1
+            fi
 
             aws ecr get-login-password --region "$AWS_REGION" | \
               docker login --username AWS --password-stdin "$ECR_REGISTRY"
