@@ -1,3 +1,14 @@
+import os
+import sys
+import json
+import random
+from datetime import datetime, timedelta, timezone
+
+# Ensure the project root is on the Python path so 'app' is importable
+# regardless of which directory the script is run from.
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
 from app import create_app, db
 from app.models.user import User
 from app.models.enums import TaskPriority, UserRole, TaskStatus, ProjectStatus, NotificationType, TaskType, SprintStatus
@@ -8,21 +19,23 @@ from app.models.notification import Notification
 from app.models.sprint import Sprint
 from app.models.project_member import ProjectMember
 from app.models.time_log import TimeLog
-from datetime import datetime, timedelta, UTC
-import json
-import random
+from app.models.activity_log import ActivityLog
+from app.models.task_attachment import TaskAttachment
+from config import DevelopmentConfig
 
 # Create Flask app instance
-app = create_app('dev')
+app = create_app(DevelopmentConfig)
 
 # Run within application context
 with app.app_context():
     try:
         print("🧹 Clearing existing data...")
         # Clear in proper order to avoid foreign key constraints
+        db.session.query(ActivityLog).delete()
         db.session.query(TimeLog).delete()
         db.session.query(Notification).delete()
         db.session.query(TaskComment).delete()
+        db.session.query(TaskAttachment).delete()
         db.session.query(Task).delete()
         db.session.query(ProjectMember).delete()
         db.session.query(Sprint).delete()
@@ -176,8 +189,8 @@ with app.app_context():
             description="Complete redesign of the company's e-commerce platform with modern UI/UX and improved performance", 
             owner_id=manager.id, 
             status=ProjectStatus.ACTIVE,
-            start_date=datetime.now(UTC) - timedelta(days=30),
-            end_date=datetime.now(UTC) + timedelta(days=60),
+            start_date=datetime.now(timezone.utc) - timedelta(days=30),
+            end_date=datetime.now(timezone.utc) + timedelta(days=60),
             estimated_hours=800.0,
             technology_stack=json.dumps(["React", "Node.js", "PostgreSQL", "Redis", "AWS"]),
             client_name="Tech Corp Inc.",
@@ -189,8 +202,8 @@ with app.app_context():
             description="Native mobile application for iOS and Android platforms with real-time features", 
             owner_id=team_lead.id, 
             status=ProjectStatus.ACTIVE,
-            start_date=datetime.now(UTC) - timedelta(days=20),
-            end_date=datetime.now(UTC) + timedelta(days=90),
+            start_date=datetime.now(timezone.utc) - timedelta(days=20),
+            end_date=datetime.now(timezone.utc) + timedelta(days=90),
             estimated_hours=1200.0,
             technology_stack=json.dumps(["React Native", "Firebase", "Node.js", "MongoDB"]),
             client_name="StartupXYZ",
@@ -202,8 +215,8 @@ with app.app_context():
             description="Migrate legacy database to cloud infrastructure with performance optimization", 
             owner_id=admin.id, 
             status=ProjectStatus.COMPLETED,
-            start_date=datetime.now(UTC) - timedelta(days=90),
-            end_date=datetime.now(UTC) - timedelta(days=10),
+            start_date=datetime.now(timezone.utc) - timedelta(days=90),
+            end_date=datetime.now(timezone.utc) - timedelta(days=10),
             estimated_hours=400.0,
             technology_stack=json.dumps(["PostgreSQL", "AWS RDS", "Docker", "Python"])
         )
@@ -213,8 +226,8 @@ with app.app_context():
             description="Comprehensive admin dashboard for internal analytics, user management, and reporting", 
             owner_id=indal.id, 
             status=ProjectStatus.ACTIVE,
-            start_date=datetime.now(UTC) - timedelta(days=15),
-            end_date=datetime.now(UTC) + timedelta(days=45),
+            start_date=datetime.now(timezone.utc) - timedelta(days=15),
+            end_date=datetime.now(timezone.utc) + timedelta(days=45),
             estimated_hours=600.0,
             technology_stack=json.dumps(["Flask", "React", "PostgreSQL", "Chart.js", "Docker"])
         )
@@ -224,8 +237,8 @@ with app.app_context():
             description="Advanced feedback collection and analysis system with AI-powered insights", 
             owner_id=analyst.id, 
             status=ProjectStatus.ON_HOLD,
-            start_date=datetime.now(UTC) + timedelta(days=30),
-            end_date=datetime.now(UTC) + timedelta(days=120),
+            start_date=datetime.now(timezone.utc) + timedelta(days=30),
+            end_date=datetime.now(timezone.utc) + timedelta(days=120),
             estimated_hours=500.0,
             technology_stack=json.dumps(["Python", "FastAPI", "PostgreSQL", "Machine Learning", "React"])
         )
@@ -235,8 +248,8 @@ with app.app_context():
             description="Complete CI/CD pipeline setup with monitoring and automated deployments", 
             owner_id=devops.id, 
             status=ProjectStatus.ACTIVE,
-            start_date=datetime.now(UTC) - timedelta(days=10),
-            end_date=datetime.now(UTC) + timedelta(days=30),
+            start_date=datetime.now(timezone.utc) - timedelta(days=10),
+            end_date=datetime.now(timezone.utc) + timedelta(days=30),
             estimated_hours=300.0,
             technology_stack=json.dumps(["Docker", "Kubernetes", "Jenkins", "AWS", "Terraform", "Prometheus"])
         )
@@ -311,8 +324,8 @@ with app.app_context():
             description="Setup project foundation, basic authentication, and database schema",
             project_id=project1.id,
             status=SprintStatus.COMPLETED,
-            start_date=datetime.now(UTC) - timedelta(days=28),
-            end_date=datetime.now(UTC) - timedelta(days=14),
+            start_date=datetime.now(timezone.utc) - timedelta(days=28),
+            end_date=datetime.now(timezone.utc) - timedelta(days=14),
             goal="Establish solid project foundation and core functionality",
             capacity_hours=160.0,
             velocity_points=25
@@ -323,8 +336,8 @@ with app.app_context():
             description="Implement product catalog, shopping cart, and checkout process",
             project_id=project1.id,
             status=SprintStatus.ACTIVE,
-            start_date=datetime.now(UTC) - timedelta(days=14),
-            end_date=datetime.now(UTC),
+            start_date=datetime.now(timezone.utc) - timedelta(days=14),
+            end_date=datetime.now(timezone.utc),
             goal="Deliver core e-commerce functionality",
             capacity_hours=160.0,
             velocity_points=30
@@ -336,8 +349,8 @@ with app.app_context():
             description="Project setup, navigation, and basic UI components",
             project_id=project2.id,
             status=SprintStatus.ACTIVE,
-            start_date=datetime.now(UTC) - timedelta(days=14),
-            end_date=datetime.now(UTC),
+            start_date=datetime.now(timezone.utc) - timedelta(days=14),
+            end_date=datetime.now(timezone.utc),
             goal="Setup mobile app foundation",
             capacity_hours=120.0,
             velocity_points=20
@@ -349,8 +362,8 @@ with app.app_context():
             description="Build main dashboard layout and user management features",
             project_id=project4.id,
             status=SprintStatus.PLANNED,
-            start_date=datetime.now(UTC),
-            end_date=datetime.now(UTC) + timedelta(days=14),
+            start_date=datetime.now(timezone.utc),
+            end_date=datetime.now(timezone.utc) + timedelta(days=14),
             goal="Create functional admin dashboard",
             capacity_hours=140.0,
             velocity_points=22
@@ -379,8 +392,8 @@ with app.app_context():
                 created_by_id=manager.id,
                 project_id=project1.id,
                 sprint_id=sprint1.id,
-                due_date=datetime.now(UTC) - timedelta(days=25),
-                completion_date=datetime.now(UTC) - timedelta(days=24),
+                due_date=datetime.now(timezone.utc) - timedelta(days=25),
+                completion_date=datetime.now(timezone.utc) - timedelta(days=24),
                 estimated_hours=8.0,
                 actual_hours=6.5,
                 story_points=5
@@ -396,8 +409,8 @@ with app.app_context():
                 created_by_id=manager.id,
                 project_id=project1.id,
                 sprint_id=sprint1.id,
-                due_date=datetime.now(UTC) - timedelta(days=20),
-                completion_date=datetime.now(UTC) - timedelta(days=19),
+                due_date=datetime.now(timezone.utc) - timedelta(days=20),
+                completion_date=datetime.now(timezone.utc) - timedelta(days=19),
                 estimated_hours=16.0,
                 actual_hours=18.5,
                 story_points=8,
@@ -414,8 +427,8 @@ with app.app_context():
                 created_by_id=manager.id,
                 project_id=project1.id,
                 sprint_id=sprint1.id,
-                due_date=datetime.now(UTC) - timedelta(days=18),
-                completion_date=datetime.now(UTC) - timedelta(days=16),
+                due_date=datetime.now(timezone.utc) - timedelta(days=18),
+                completion_date=datetime.now(timezone.utc) - timedelta(days=16),
                 estimated_hours=20.0,
                 actual_hours=22.0,
                 story_points=8,
@@ -433,8 +446,8 @@ with app.app_context():
                 created_by_id=manager.id,
                 project_id=project1.id,
                 sprint_id=sprint2.id,
-                due_date=datetime.now(UTC) + timedelta(days=5),
-                start_date=datetime.now(UTC) - timedelta(days=10),
+                due_date=datetime.now(timezone.utc) + timedelta(days=5),
+                start_date=datetime.now(timezone.utc) - timedelta(days=10),
                 estimated_hours=32.0,
                 actual_hours=20.0,
                 story_points=13,
@@ -451,7 +464,7 @@ with app.app_context():
                 created_by_id=manager.id,
                 project_id=project1.id,
                 sprint_id=sprint2.id,
-                due_date=datetime.now(UTC) + timedelta(days=8),
+                due_date=datetime.now(timezone.utc) + timedelta(days=8),
                 estimated_hours=24.0,
                 story_points=8,
                 acceptance_criteria="Users can add products to cart, modify quantities, and proceed to checkout"
@@ -467,8 +480,8 @@ with app.app_context():
                 created_by_id=manager.id,
                 project_id=project1.id,
                 sprint_id=sprint2.id,
-                due_date=datetime.now(UTC) + timedelta(days=3),
-                start_date=datetime.now(UTC) - timedelta(days=8),
+                due_date=datetime.now(timezone.utc) + timedelta(days=3),
+                start_date=datetime.now(timezone.utc) - timedelta(days=8),
                 estimated_hours=16.0,
                 actual_hours=14.0,
                 story_points=5
@@ -485,8 +498,8 @@ with app.app_context():
                 created_by_id=team_lead.id,
                 project_id=project2.id,
                 sprint_id=sprint3.id,
-                due_date=datetime.now(UTC) - timedelta(days=10),
-                completion_date=datetime.now(UTC) - timedelta(days=11),
+                due_date=datetime.now(timezone.utc) - timedelta(days=10),
+                completion_date=datetime.now(timezone.utc) - timedelta(days=11),
                 estimated_hours=12.0,
                 actual_hours=10.0,
                 story_points=5
@@ -502,8 +515,8 @@ with app.app_context():
                 created_by_id=team_lead.id,
                 project_id=project2.id,
                 sprint_id=sprint3.id,
-                due_date=datetime.now(UTC) + timedelta(days=5),
-                start_date=datetime.now(UTC) - timedelta(days=5),
+                due_date=datetime.now(timezone.utc) + timedelta(days=5),
+                start_date=datetime.now(timezone.utc) - timedelta(days=5),
                 estimated_hours=20.0,
                 actual_hours=12.0,
                 story_points=8
@@ -519,7 +532,7 @@ with app.app_context():
                 assigned_to_id=emp1.id,
                 created_by_id=emp2.id,
                 project_id=project1.id,
-                due_date=datetime.now(UTC) + timedelta(days=2),
+                due_date=datetime.now(timezone.utc) + timedelta(days=2),
                 estimated_hours=4.0,
                 story_points=3,
                 labels=json.dumps(["bug", "authentication", "urgent"])
@@ -534,7 +547,7 @@ with app.app_context():
                 assigned_to_id=indal.id,
                 created_by_id=team_lead.id,
                 project_id=project1.id,
-                due_date=datetime.now(UTC) + timedelta(days=7),
+                due_date=datetime.now(timezone.utc) + timedelta(days=7),
                 estimated_hours=12.0,
                 story_points=5,
                 labels=json.dumps(["performance", "database", "optimization"])
@@ -614,7 +627,7 @@ with app.app_context():
                 hours_per_day = task.actual_hours / days_worked
                 
                 for i in range(days_worked):
-                    log_date = task.completion_date - timedelta(days=days_worked-i-1) if task.completion_date else datetime.now(UTC).date()
+                    log_date = task.completion_date - timedelta(days=days_worked-i-1) if task.completion_date else datetime.now(timezone.utc).date()
                     daily_hours = round(hours_per_day + random.uniform(-1, 1), 1)
                     if daily_hours > 0:
                         time_logs.append(TimeLog(
@@ -632,7 +645,7 @@ with app.app_context():
                 hours_per_day = task.actual_hours / days_worked
                 
                 for i in range(days_worked):
-                    log_date = datetime.now(UTC) - timedelta(days=days_worked-i-1)
+                    log_date = datetime.now(timezone.utc) - timedelta(days=days_worked-i-1)
                     daily_hours = round(hours_per_day + random.uniform(-0.5, 0.5), 1)
                     if daily_hours > 0:
                         time_logs.append(TimeLog(
@@ -675,7 +688,7 @@ with app.app_context():
 
         # Overdue task notifications
         overdue_tasks = db.session.query(Task).filter(
-            Task.due_date < datetime.now(UTC),
+            Task.due_date < datetime.now(timezone.utc),
             Task.status.notin_([TaskStatus.DONE, TaskStatus.CANCELLED])
         ).all()
         
