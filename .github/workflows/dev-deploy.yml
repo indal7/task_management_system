@@ -12,10 +12,6 @@ jobs:
       contents: read
       id-token: write
 
-    outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
-      ecr_registry: "492661377251.dkr.ecr.ap-south-1.amazonaws.com"
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -55,7 +51,7 @@ jobs:
           cache-from: type=gha,scope=prod
           cache-to: type=gha,mode=max,scope=prod
 
-  # ── Deploy to DEV EC2 ─────────────────────────────────────────────────────
+  # ── Deploy to DEV EC2 ───────────────────��─────────────────────────────────
   deploy:
     name: Deploy to DEV EC2
     runs-on: ubuntu-latest
@@ -67,11 +63,30 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Debug - Print Build Outputs
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-1' }}
+
+      - name: Compute ECR Image URI
+        id: ecr-image
         run: |
-          echo "🔍 DEBUG: Received outputs from build-and-push job:"
-          echo "ecr_registry: ${{ needs.build-and-push.outputs.ecr_registry }}"
-          echo "image_tag: ${{ needs.build-and-push.outputs.image_tag }}"
+          # Hardcode the values since job outputs aren't working
+          AWS_ACCOUNT_ID="492661377251"
+          AWS_REGION="${{ secrets.AWS_REGION || 'ap-south-1' }}"
+          ECR_REPOSITORY="${{ secrets.ECR_REPOSITORY_DEV || 'taskmanager-dev' }}"
+          IMAGE_TAG="dev-latest"
+          
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          ECR_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          
+          echo "ecr_image=$ECR_IMAGE" >> $GITHUB_OUTPUT
+          echo "ecr_registry=$ECR_REGISTRY" >> $GITHUB_OUTPUT
+          
+          echo "✅ ECR Registry: $ECR_REGISTRY"
+          echo "✅ ECR Image: $ECR_IMAGE"
 
       - name: Configure SSH
         run: |
@@ -99,20 +114,14 @@ jobs:
 
       - name: Pull latest image and restart on DEV EC2
         env:
-          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+          ECR_IMAGE: ${{ steps.ecr-image.outputs.ecr_image }}
+          ECR_REGISTRY: ${{ steps.ecr-image.outputs.ecr_registry }}
           AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
-          ECR_REGISTRY: ${{ needs.build-and-push.outputs.ecr_registry }}
-          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_DEV || 'taskmanager-dev' }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          # Build the full ECR image URI on the GitHub Actions runner
-          ECR_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
-          
-          echo "🔐 ECR_IMAGE resolved to: $ECR_IMAGE"
-          echo "DEBUG - ECR_REGISTRY value: '${ECR_REGISTRY}'"
-          echo "DEBUG - ECR_REPOSITORY value: '${ECR_REPOSITORY}'"
-          echo "DEBUG - IMAGE_TAG value: '${IMAGE_TAG}'"
+          echo "🔐 ECR_IMAGE: $ECR_IMAGE"
+          echo "🔐 ECR_REGISTRY: $ECR_REGISTRY"
           
           # Create a temporary deployment script
           cat > /tmp/ecr_deploy.sh << 'SCRIPT'
@@ -190,6 +199,5 @@ jobs:
           echo "🎉 DEV DEPLOYMENT SUCCESSFUL!"
           echo "App:      http://${{ secrets.EC2_HOST_DEV }}:5000"
           echo "Health:   http://${{ secrets.EC2_HOST_DEV }}:5000/health"
-          echo "Image:    ${{ needs.build-and-push.outputs.image_tag }}"
           echo "Deployed: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo "Actor:    ${{ github.actor }}"
