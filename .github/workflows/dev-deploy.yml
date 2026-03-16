@@ -89,6 +89,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Debug - Print Build Outputs
+        run: |
+          echo "🔍 DEBUG: Received outputs from build-and-push job:"
+          echo "ecr_registry: ${{ needs.build-and-push.outputs.ecr_registry }}"
+          echo "image_tag: ${{ needs.build-and-push.outputs.image_tag }}"
+
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -126,6 +132,9 @@ jobs:
           ECR_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
           
           echo "🔐 ECR_IMAGE resolved to: $ECR_IMAGE"
+          echo "DEBUG - ECR_REGISTRY value: '${ECR_REGISTRY}'"
+          echo "DEBUG - ECR_REPOSITORY value: '${ECR_REPOSITORY}'"
+          echo "DEBUG - IMAGE_TAG value: '${IMAGE_TAG}'"
           
           # Create a temporary deployment script
           cat > /tmp/ecr_deploy.sh << 'SCRIPT'
