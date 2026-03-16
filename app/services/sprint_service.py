@@ -16,6 +16,64 @@ logger = get_logger('sprints')
 class SprintService:
 
     @staticmethod
+    def list_sprints(filters, page=1, per_page=10):
+        """List sprints with optional filtering and pagination."""
+        try:
+            from app.models.enums import SprintStatus
+            query = Sprint.query
+
+            if filters.get('status'):
+                try:
+                    status_enum = SprintStatus[filters['status'].upper()]
+                    query = query.filter_by(status=status_enum)
+                except KeyError:
+                    pass
+
+            if filters.get('project_id'):
+                query = query.filter_by(project_id=filters['project_id'])
+
+            if filters.get('search'):
+                search_term = f"%{filters['search']}%"
+                query = query.filter(Sprint.name.ilike(search_term))
+
+            total = query.count()
+            sprints = query.order_by(Sprint.start_date.desc()) \
+                .offset((page - 1) * per_page).limit(per_page).all()
+
+            logger.info(f"Listed {len(sprints)} sprints (page {page})")
+            return {
+                'data': [s.to_dict() for s in sprints],
+                'total': total,
+                'page': page,
+                'per_page': per_page,
+                'total_pages': (total + per_page - 1) // per_page,
+                'has_next': (page * per_page) < total,
+                'has_prev': page > 1
+            }, 200
+
+        except Exception as e:
+            logger.error(f"Error listing sprints: {str(e)}")
+            return {'error': f'Error listing sprints: {str(e)}'}, 500
+
+    @staticmethod
+    def get_sprint_tasks(sprint_id, user_id):
+        """Get all tasks for a sprint."""
+        try:
+            sprint = Sprint.query.get_or_404(sprint_id)
+            user = User.query.get_or_404(user_id)
+
+            if not user.has_project_permission(sprint.project_id, 'create_tasks') and sprint.project.owner_id != user_id:
+                return {'error': 'Insufficient permissions to view sprint tasks'}, 403
+
+            tasks = Task.query.filter_by(sprint_id=sprint_id).all()
+            logger.info(f"Fetched {len(tasks)} tasks for sprint {sprint_id}")
+            return [task.to_dict() for task in tasks], 200
+
+        except Exception as e:
+            logger.error(f"Error fetching tasks for sprint {sprint_id}: {str(e)}")
+            return {'error': f'Error fetching sprint tasks: {str(e)}'}, 500
+
+    @staticmethod
     def create_sprint(data, user_id):
         """Create a new sprint with notifications and caching."""
         try:

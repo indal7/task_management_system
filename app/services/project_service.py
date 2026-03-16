@@ -2,6 +2,7 @@
 from app.models.project import Project
 from app.models.user import User
 from app import db
+from datetime import datetime
 from app.utils.cache_utils import cache, cached_per_user, CacheKeys, invalidate_user_cache, invalidate_project_cache
 from app.utils.logger import get_logger, log_db_query
 
@@ -115,3 +116,92 @@ class ProjectService:
         except Exception as e:
             logger.error(f"Error fetching recent projects: {str(e)}")
             return {'error': f'Error fetching recent projects: {str(e)}'}, 500
+
+    @staticmethod
+    def get_project_stats(project_id):
+        """Gets statistics for a project."""
+        try:
+            from app.models.task import Task
+            from app.models.enums import TaskStatus
+            from app.models.time_log import TimeLog
+            from sqlalchemy import func
+
+            project = Project.query.get_or_404(project_id)
+            tasks = project.tasks
+            now = datetime.utcnow()
+
+            total_tasks = len(tasks)
+            completed_tasks = sum(1 for t in tasks if t.status == TaskStatus.DONE)
+            in_progress_tasks = sum(1 for t in tasks if t.status == TaskStatus.IN_PROGRESS)
+            overdue_tasks = sum(
+                1 for t in tasks
+                if t.due_date and t.due_date < now and t.status != TaskStatus.DONE
+            )
+            completion_percentage = round((completed_tasks / total_tasks * 100), 2) if total_tasks > 0 else 0
+
+            total_hours = db.session.query(func.sum(TimeLog.hours)).join(Task).filter(
+                Task.project_id == project_id
+            ).scalar() or 0
+
+            active_sprint = project.get_active_sprint()
+
+            logger.info(f"Project stats fetched for project {project_id}")
+            return {
+                'project_id': project.id,
+                'project_name': project.name,
+                'total_tasks': total_tasks,
+                'completed_tasks': completed_tasks,
+                'in_progress_tasks': in_progress_tasks,
+                'overdue_tasks': overdue_tasks,
+                'completion_percentage': completion_percentage,
+                'total_sprints': len(project.sprints),
+                'active_sprint_id': active_sprint.id if active_sprint else None,
+                'active_sprint_name': active_sprint.name if active_sprint else None,
+                'team_members_count': len(project.team_members),
+                'total_hours_logged': float(total_hours),
+                'estimated_hours': project.estimated_hours or 0
+            }
+        except Exception as e:
+            logger.error(f"Error fetching project stats {project_id}: {str(e)}")
+            return {'error': f'Error fetching project stats: {str(e)}'}, 500
+
+    @staticmethod
+    def get_project_progress(project_id):
+        """Gets progress timeline for a project."""
+        try:
+            from app.models.task import Task
+            from app.models.enums import TaskStatus
+
+            project = Project.query.get_or_404(project_id)
+            tasks = project.tasks
+            total_tasks = len(tasks)
+            completed_tasks = sum(1 for t in tasks if t.status == TaskStatus.DONE)
+            completion_percentage = round((completed_tasks / total_tasks * 100), 2) if total_tasks > 0 else 0
+
+            # Sprint progress
+            sprint_progress = []
+            for sprint in project.sprints:
+                sprint_tasks = sprint.tasks
+                sprint_total = len(sprint_tasks)
+                sprint_done = sum(1 for t in sprint_tasks if t.status == TaskStatus.DONE)
+                sprint_progress.append({
+                    'sprint_id': sprint.id,
+                    'sprint_name': sprint.name,
+                    'status': sprint.status.value,
+                    'total_tasks': sprint_total,
+                    'completed_tasks': sprint_done,
+                    'completion_percentage': round((sprint_done / sprint_total * 100), 2) if sprint_total > 0 else 0
+                })
+
+            logger.info(f"Project progress fetched for project {project_id}")
+            return {
+                'project_id': project.id,
+                'project_name': project.name,
+                'overall_completion': completion_percentage,
+                'total_tasks': total_tasks,
+                'completed_tasks': completed_tasks,
+                'sprint_progress': sprint_progress
+            }
+        except Exception as e:
+            logger.error(f"Error fetching project progress {project_id}: {str(e)}")
+            return {'error': f'Error fetching project progress: {str(e)}'}, 500

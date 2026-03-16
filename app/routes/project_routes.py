@@ -98,6 +98,53 @@ def delete(project_id):
         return server_error_response(f"Error deleting project: {str(e)}")
 
 
+@project_bp.route('/<int:project_id>', methods=['PUT'])
+@jwt_required()
+def update_put(project_id):
+    """PUT alias for project update (same as PATCH)."""
+    data = request.get_json()
+    try:
+        result = ProjectService.update_project(project_id, data)
+        logger.info(f"Project updated (PUT) successfully | Project: {project_id}")
+        cache.delete(f"projects:{project_id}")
+        cache.delete("projects:all")
+        return success_response("Project updated successfully", result)
+    except Exception as e:
+        logger.error(f"Error updating project {project_id}: {e}", exc_info=True)
+        return server_error_response(f"Error updating project: {str(e)}")
+
+
+@project_bp.route('/<int:project_id>/stats', methods=['GET'])
+@jwt_required()
+def get_stats(project_id):
+    """Get statistics for a specific project."""
+    try:
+        from app.models.task import Task
+        from app.models.enums import TaskStatus
+        from app.models.sprint import Sprint
+        key = f"projects:{project_id}:stats"
+        result = cache_result(key, lambda: ProjectService.get_project_stats(project_id))
+        logger.info(f"Project stats retrieved | Project: {project_id}")
+        return success_response("Project stats retrieved successfully", result)
+    except Exception as e:
+        logger.error(f"Error fetching project stats {project_id}: {e}", exc_info=True)
+        return server_error_response(f"Error fetching project stats: {str(e)}")
+
+
+@project_bp.route('/<int:project_id>/progress', methods=['GET'])
+@jwt_required()
+def get_progress(project_id):
+    """Get progress data for a specific project."""
+    try:
+        key = f"projects:{project_id}:progress"
+        result = cache_result(key, lambda: ProjectService.get_project_progress(project_id))
+        logger.info(f"Project progress retrieved | Project: {project_id}")
+        return success_response("Project progress retrieved successfully", result)
+    except Exception as e:
+        logger.error(f"Error fetching project progress {project_id}: {e}", exc_info=True)
+        return server_error_response(f"Error fetching project progress: {str(e)}")
+
+
 @project_bp.route('/recent', methods=['GET'])
 @jwt_required()
 def get_recent():
