@@ -39,7 +39,7 @@ class SearchService:
 
             # Search users (non-sensitive)
             users = User.query.filter(
-                User.is_active == True,
+                User.is_active.is_(True),
                 db.or_(
                     User.name.ilike(pattern),
                     User.email.ilike(pattern),

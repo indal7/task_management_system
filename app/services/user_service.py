@@ -33,7 +33,7 @@ class UserService:
                     return {'error': f'Invalid role: {role}'}, 400
 
             if is_active is not None:
-                query = query.filter(User.is_active == is_active)
+                query = query.filter(User.is_active.is_(is_active))
 
             total = query.count()
             users = query.order_by(User.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
@@ -174,7 +174,7 @@ class UserService:
         try:
             pattern = f'%{query_str}%'
             users = User.query.filter(
-                User.is_active == True,
+                User.is_active.is_(True),
                 db.or_(User.name.ilike(pattern), User.email.ilike(pattern))
             ).limit(limit).all()
             return [u.to_dict() for u in users], 200
