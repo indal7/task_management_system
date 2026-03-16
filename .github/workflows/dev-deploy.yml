@@ -1,21 +1,10 @@
 name: Dev Deploy
 
-# Auto-deploys on every push to the master branch.
-#
-# Required GitHub Secrets (Settings → Secrets and variables → Actions):
-#   AWS_ACCESS_KEY_ID     – IAM access key with ECR push + EC2 permissions
-#   AWS_SECRET_ACCESS_KEY – Matching secret key
-#   AWS_REGION            – e.g. ap-south-1  (defaults to ap-south-1 if omitted)
-#   ECR_REPOSITORY_DEV    – ECR repository name, e.g. taskmanager-dev
-#   EC2_HOST_DEV          – Public IP / hostname of the dev EC2 instance
-#   EC2_KEY_DEV           – Private SSH key for the dev EC2 instance
-
 on:
   push:
     branches: [ master ]
 
 jobs:
-  # ── Build & Push Docker image to ECR (dev) ────────────────────────────────
   build-and-push:
     name: Build & Push to ECR (dev)
     runs-on: ubuntu-latest
@@ -25,7 +14,7 @@ jobs:
 
     outputs:
       image_tag: ${{ steps.meta.outputs.version }}
-      ecr_registry: ${{ steps.capture-registry.outputs.registry }}
+      ecr_registry: "492661377251.dkr.ecr.ap-south-1.amazonaws.com"
 
     steps:
       - name: Checkout Code
@@ -42,22 +31,11 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Capture ECR Registry
-        id: capture-registry
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
-        run: |
-          # Get AWS account ID from caller identity
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
-          echo "✅ ECR Registry: $REGISTRY"
-
       - name: Generate image metadata (tags & labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.capture-registry.outputs.registry }}/${{ secrets.ECR_REPOSITORY_DEV || 'taskmanager-dev' }}
+          images: "492661377251.dkr.ecr.ap-south-1.amazonaws.com/${{ secrets.ECR_REPOSITORY_DEV || 'taskmanager-dev' }}"
           tags: |
             type=sha,prefix=,format=short
             type=raw,value=dev-latest
