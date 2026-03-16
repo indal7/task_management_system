@@ -6,7 +6,7 @@ name: Dev Deploy
 #   AWS_ACCESS_KEY_ID     – IAM access key with ECR push + EC2 permissions
 #   AWS_SECRET_ACCESS_KEY – Matching secret key
 #   AWS_REGION            – e.g. ap-south-1  (defaults to ap-south-1 if omitted)
-#   ECR_REPOSITORY_DEV    – ECR repository name, e.g. taskmanager-dev
+#   ECR_REPOSITORY    – ECR repository name, e.g. taskmanager-dev
 #   EC2_HOST_DEV          – Public IP / hostname of the dev EC2 instance
 #   EC2_KEY_DEV           – Private SSH key for the dev EC2 instance
 
@@ -46,7 +46,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_DEV || 'taskmanager-dev' }}
+          images: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY || 'taskmanager-dev' }}
           tags: |
             type=sha,prefix=,format=short
             type=raw,value=dev-latest
@@ -108,19 +108,28 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
           ECR_REGISTRY: ${{ needs.build-and-push.outputs.ecr_registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_DEV || 'taskmanager-dev' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           ssh -T -i ~/.ssh/github-actions-key.pem \
               -o StrictHostKeyChecking=no \
               ubuntu@${{ secrets.EC2_HOST_DEV }} \
-              bash -s -- "$ECR_REGISTRY" "$ECR_REPOSITORY" "$IMAGE_TAG" "$AWS_REGION" << 'ENDSSH'
+              bash -s -- "$ECR_REGISTRY" "$ECR_REPOSITORY" "$IMAGE_TAG" "$AWS_REGION" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" << 'ENDSSH'
             set -e
             ECR_REGISTRY="$1"
             ECR_REPOSITORY="$2"
             IMAGE_TAG="$3"
             AWS_REGION="$4"
+            AWS_ACCESS_KEY_ID="$5"
+            AWS_SECRET_ACCESS_KEY="$6"
             ECR_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
             echo "🔐 Authenticating Docker with ECR..."
+            # Export AWS credentials for the session
+            export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+            export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+            export AWS_REGION="$AWS_REGION"
+
             aws ecr get-login-password --region "$AWS_REGION" | \
               docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
