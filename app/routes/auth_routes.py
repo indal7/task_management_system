@@ -92,20 +92,34 @@ def update_profile():
     data = request.get_json()
     user_id = get_jwt_identity()
 
-    name = data.get('name')
-    email = data.get('email')
-    password = data.get('password')
+    updatable_fields = {
+        'name',
+        'email',
+        'password',
+        'bio',
+        'skills',
+        'github_username',
+        'linkedin_url',
+        'phone',
+        'timezone',
+        'daily_work_hours',
+        'hourly_rate'
+    }
 
-    if not name and not email and not password:
+    if not data or not any(field in data for field in updatable_fields):
         logger.warning(f"Profile update failed: No fields to update | User: {user_id}")
         return validation_error_response('No fields to update')
 
     result = AuthService.update_profile(user_id, data)
 
-    if result:
+    if result and 'error' not in result:
         logger.info(f"Profile updated successfully | User: {user_id}")
         return success_response("Profile updated successfully", result)
-    
+
+    if result and 'error' in result:
+        logger.error(f"Profile update failed | User: {user_id} | Error: {result['error']}")
+        return error_response(result['error'])
+
     logger.error(f"Profile update failed | User: {user_id}")
     return error_response('Failed to update profile')
 

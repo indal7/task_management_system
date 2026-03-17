@@ -1,6 +1,7 @@
 # app/models/user.py
 from app import db
 from datetime import datetime
+import json
 from werkzeug.security import generate_password_hash, check_password_hash
 from .enums import UserRole
 
@@ -131,6 +132,15 @@ class User(db.Model):
                       timezone=None, daily_work_hours=None, hourly_rate=None):
         """Update user profile with logging and cache invalidation."""
         logger.info(f"Updating profile for user {self.id}")
+
+        normalized_skills = skills
+        if skills is not None:
+            if isinstance(skills, list):
+                normalized_skills = json.dumps(skills)
+            elif isinstance(skills, str):
+                normalized_skills = skills
+            else:
+                raise ValueError("Skills must be a list or JSON string")
         
         # Check email uniqueness
         if email and User.query.filter(User.email == email, User.id != self.id).first():
@@ -149,9 +159,9 @@ class User(db.Model):
         if bio is not None and bio != self.bio:
             changes.append("bio updated")
             self.bio = bio
-        if skills is not None and skills != self.skills:
+        if normalized_skills is not None and normalized_skills != self.skills:
             changes.append("skills updated")
-            self.skills = skills
+            self.skills = normalized_skills
         if github_username is not None and github_username != self.github_username:
             changes.append(f"github: {github_username}")
             self.github_username = github_username

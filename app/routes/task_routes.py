@@ -89,6 +89,12 @@ def get_tasks():
             filters['priority'] = request.args.get('priority')
         if request.args.get('task_type'):
             filters['task_type'] = request.args.get('task_type')
+
+        # Calendar/date-range filters
+        if request.args.get('start_date'):
+            filters['start_date'] = request.args.get('start_date')
+        if request.args.get('end_date'):
+            filters['end_date'] = request.args.get('end_date')
             
         # Special filters
         if request.args.get('overdue') == 'true':

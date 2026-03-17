@@ -85,7 +85,7 @@ class AuthService:
             current_user_id = get_jwt_identity()
             user = User.query.get_or_404(current_user_id)
             logger.info(f"Token validated for user {user.id}")
-            return user.to_dict()
+            return user.to_dict(include_sensitive=True)
         except Exception as e:
             logger.error(f"Token validation error: {str(e)}")
             return {"error": f"Token validation failed: {str(e)}"}, 401
@@ -135,20 +135,30 @@ class AuthService:
             if 'password' in data:
                 user.password_hash = generate_password_hash(data['password'])
 
-            if 'email' in data:
-                user.email = data['email']
+            user.update_profile(
+                name=data.get('name'),
+                email=data.get('email'),
+                bio=data.get('bio'),
+                skills=data.get('skills'),
+                github_username=data.get('github_username'),
+                linkedin_url=data.get('linkedin_url'),
+                phone=data.get('phone'),
+                timezone=data.get('timezone'),
+                daily_work_hours=data.get('daily_work_hours'),
+                hourly_rate=data.get('hourly_rate')
+            )
 
-            if 'name' in data:
-                user.name = data['name']
+            if 'password' in data:
+                db.session.commit()
+                log_db_query("UPDATE", "users")
+                invalidate_user_cache(user.id)
 
-            db.session.commit()
-            log_db_query("UPDATE", "users")
             logger.info(f"User {user.id} profile updated")
-
-            # Invalidate user cache
-            invalidate_user_cache(user.id)
-
-            return {'message': 'Profile updated successfully'}
+            return user.to_dict(include_sensitive=True)
+        except ValueError as e:
+            db.session.rollback()
+            logger.error(f"Validation error updating profile for user {user_id}: {str(e)}")
+            return {"error": str(e)}
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error updating profile for user {user_id}: {str(e)}")

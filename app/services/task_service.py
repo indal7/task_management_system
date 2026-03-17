@@ -7,7 +7,7 @@ from app.models.notification import Notification
 from app.models.time_log import TimeLog
 from app import db
 from app.models.enums import TaskStatus, TaskPriority, TaskType, NotificationType
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from app.utils.cache_utils import cache, cached_per_user, CacheKeys, invalidate_user_cache, invalidate_project_cache
 from app.utils.logger import get_logger, log_db_query, log_api_request
@@ -260,10 +260,39 @@ class TaskService:
 
                 for field, enum_class in [('status', TaskStatus), ('priority', TaskPriority), ('task_type', TaskType)]:
                     if filters.get(field):
-                        try:
-                            query = query.filter(getattr(Task, field) == enum_class[filters[field].upper()])
-                        except KeyError:
-                            return {'error': f'Invalid {field} filter'}, 400
+                        raw_value = filters[field]
+                        if isinstance(raw_value, str):
+                            raw_items = [item.strip() for item in raw_value.split(',') if item.strip()]
+                        elif isinstance(raw_value, list):
+                            raw_items = [str(item).strip() for item in raw_value if str(item).strip()]
+                        else:
+                            raw_items = [str(raw_value).strip()]
+
+                        enum_values = []
+                        for item in raw_items:
+                            try:
+                                enum_values.append(enum_class[item.upper()])
+                            except KeyError:
+                                return {'error': f'Invalid {field} filter: {item}'}, 400
+
+                        if len(enum_values) == 1:
+                            query = query.filter(getattr(Task, field) == enum_values[0])
+                        elif len(enum_values) > 1:
+                            query = query.filter(getattr(Task, field).in_(enum_values))
+
+                if filters.get('start_date'):
+                    try:
+                        start_date = datetime.fromisoformat(str(filters['start_date']))
+                        query = query.filter(Task.due_date >= start_date)
+                    except ValueError:
+                        return {'error': 'Invalid start_date format. Expected YYYY-MM-DD'}, 400
+
+                if filters.get('end_date'):
+                    try:
+                        end_date = datetime.fromisoformat(str(filters['end_date'])) + timedelta(days=1)
+                        query = query.filter(Task.due_date < end_date)
+                    except ValueError:
+                        return {'error': 'Invalid end_date format. Expected YYYY-MM-DD'}, 400
 
                 if filters.get('overdue'):
                     query = query.filter(Task.due_date < datetime.utcnow(), Task.status != TaskStatus.DONE)
