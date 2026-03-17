@@ -14,7 +14,7 @@ logger = get_logger('api.search')
 @search_bp.route('/global', methods=['GET'])
 @jwt_required()
 def global_search():
-    """Global search across tasks, projects and users."""
+    """Global search across tasks, projects, sprints, and users."""
     user_id = get_jwt_identity()
     try:
         q = request.args.get('q', '').strip()

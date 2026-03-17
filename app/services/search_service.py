@@ -7,7 +7,6 @@ from app.models.enums import TaskStatus, TaskPriority, TaskType
 from app import db
 from app.utils.logger import get_logger
 from datetime import datetime
-import json
 
 logger = get_logger('search')
 
@@ -16,8 +15,17 @@ class SearchService:
 
     @staticmethod
     def _get_accessible_project_ids(user):
-        projects = user.get_projects() if user else []
-        return [project.id for project in projects]
+        if not user:
+            return []
+
+        project_ids = {project.id for project in getattr(user, 'owned_projects', [])}
+
+        for membership in getattr(user, 'project_memberships', []):
+            project = getattr(membership, 'project', None)
+            if project is not None and getattr(project, 'id', None) is not None:
+                project_ids.add(project.id)
+
+        return list(project_ids)
 
     @staticmethod
     def _build_search_pattern(query_str):
