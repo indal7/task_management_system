@@ -66,8 +66,18 @@ def login():
 
     if cached_result:
         logger.info(f"Login fetched from cache | Email: {email}")
+        cached_payload = json.loads(cached_result)
+        cached_user_id = cached_payload.get('user', {}).get('id')
+        if cached_user_id:
+            ActivityService.log(
+                entity_type='auth',
+                entity_id=cached_user_id,
+                action='LOGIN',
+                user_id=cached_user_id,
+                details={'email': email, 'source': 'cache'}
+            )
         log_auth_event("Login", email=email, success=True)
-        return success_response("Login successful (from cache)", json.loads(cached_result))
+        return success_response("Login successful (from cache)", cached_payload)
 
     # Authenticate user
     result = AuthService.login_user(email, password)
