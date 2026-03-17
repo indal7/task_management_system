@@ -246,14 +246,19 @@ def logout():
         user = User.query.get(user_id) if user_id else None
 
         if user:
-            ActivityService.log(
-                entity_type='auth',
-                entity_id=user.id,
-                action='LOGOUT',
-                user_id=user.id,
-                details={'reason': reason, 'source': source}
-            )
-            logger.info(f"Logout recorded | User: {user.id} | Source: {source}")
+            dedupe_key = f"logout_dedupe:{user.id}:{source}:{reason}"
+            if cache.get(dedupe_key):
+                logger.info(f"Duplicate logout suppressed | User: {user.id} | Source: {source}")
+            else:
+                ActivityService.log(
+                    entity_type='auth',
+                    entity_id=user.id,
+                    action='LOGOUT',
+                    user_id=user.id,
+                    details={'reason': reason, 'source': source}
+                )
+                cache.set(dedupe_key, '1', timeout=15)
+                logger.info(f"Logout recorded | User: {user.id} | Source: {source}")
         else:
             logger.warning("Logout token decoded but user not found")
 
