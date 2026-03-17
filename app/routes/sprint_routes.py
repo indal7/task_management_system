@@ -82,6 +82,8 @@ def create_sprint():
     logger.info(f"Sprint created successfully | Sprint: {result.get('id')} | User: {user_id}")
     if data.get('project_id'):
         invalidate_project_cache(data['project_id'])
+    invalidate_user_cache(user_id, "project_sprints")
+    invalidate_user_cache(user_id, CacheKeys.USER_SPRINTS)
 
     return created_response("Sprint created successfully", result)
 
@@ -128,6 +130,8 @@ def update_sprint(sprint_id):
     logger.info(f"Sprint updated successfully | Sprint: {sprint_id} | User: {user_id}")
     if result.get('project_id'):
         invalidate_project_cache(result['project_id'])
+    invalidate_user_cache(user_id, "project_sprints")
+    invalidate_user_cache(user_id, CacheKeys.USER_SPRINTS)
     cache.delete(f"sprint:{sprint_id}")
     return success_response("Sprint updated successfully", result)
 
@@ -146,6 +150,8 @@ def delete_sprint(sprint_id):
     logger.info(f"Sprint deleted successfully | Sprint: {sprint_id} | User: {user_id}")
     if result.get('project_id'):
         invalidate_project_cache(result['project_id'])
+    invalidate_user_cache(user_id, "project_sprints")
+    invalidate_user_cache(user_id, CacheKeys.USER_SPRINTS)
     cache.delete(f"sprint:{sprint_id}")
     return success_response("Sprint deleted successfully", result)
 
@@ -178,6 +184,10 @@ def start_sprint(sprint_id):
         return error_response(result.get('error', 'Error starting sprint'), status_code=status_code)
 
     logger.info(f"Sprint started | Sprint: {sprint_id} | User: {user_id}")
+    if result.get('project_id'):
+        invalidate_project_cache(result['project_id'])
+    invalidate_user_cache(user_id, "project_sprints")
+    invalidate_user_cache(user_id, CacheKeys.USER_SPRINTS)
     cache.delete(f"sprint:{sprint_id}")
     return success_response("Sprint started successfully", result)
 
@@ -194,6 +204,10 @@ def complete_sprint(sprint_id):
         return error_response(result.get('error', 'Error completing sprint'), status_code=status_code)
 
     logger.info(f"Sprint completed | Sprint: {sprint_id} | User: {user_id}")
+    if result.get('project_id'):
+        invalidate_project_cache(result['project_id'])
+    invalidate_user_cache(user_id, "project_sprints")
+    invalidate_user_cache(user_id, CacheKeys.USER_SPRINTS)
     cache.delete(f"sprint:{sprint_id}")
     return success_response("Sprint completed successfully", result)
 
@@ -225,6 +239,10 @@ def add_task_to_sprint(sprint_id, task_id):
         return error_response(result.get('error', 'Error adding task to sprint'), status_code=status_code)
 
     logger.info(f"Task added to sprint | Sprint: {sprint_id} | Task: {task_id} | User: {user_id}")
+    if result.get('project_id'):
+        invalidate_project_cache(result['project_id'])
+    invalidate_user_cache(user_id, "project_sprints")
+    invalidate_user_cache(user_id, CacheKeys.USER_SPRINTS)
     cache.delete(f"sprint:{sprint_id}")
     return success_response("Task added to sprint successfully", result)
 
@@ -241,6 +259,10 @@ def remove_task_from_sprint(sprint_id, task_id):
         return error_response(result.get('error', 'Error removing task from sprint'), status_code=status_code)
 
     logger.info(f"Task removed from sprint | Sprint: {sprint_id} | Task: {task_id} | User: {user_id}")
+    if result.get('project_id'):
+        invalidate_project_cache(result['project_id'])
+    invalidate_user_cache(user_id, "project_sprints")
+    invalidate_user_cache(user_id, CacheKeys.USER_SPRINTS)
     cache.delete(f"sprint:{sprint_id}")
     return success_response("Task removed from sprint successfully", result)
 
