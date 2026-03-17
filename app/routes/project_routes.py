@@ -39,6 +39,12 @@ def create():
         return validation_error_response('Project name is required')
 
     result = ProjectService.create_project(data, user_id)
+
+    if isinstance(result, tuple):
+        payload, status_code = result
+        logger.warning(f"Project creation failed | User: {user_id} | Error: {payload.get('error', 'Unknown error')}")
+        return error_response(payload.get('error', 'Error creating project'), status_code=status_code)
+
     logger.info(f"Project created successfully | Project: {result.get('id')} | User: {user_id}")
     cache.clear()  # Clear cache after creating new project
     return created_response("Project created successfully", result)

@@ -1,6 +1,7 @@
 # app/services/project_service.py
 from app.models.project import Project
 from app.models.user import User
+from app.models.enums import ProjectStatus
 from app import db
 from datetime import datetime
 from app.utils.cache_utils import cache, cached_per_user, CacheKeys, invalidate_user_cache, invalidate_project_cache
@@ -17,11 +18,27 @@ class ProjectService:
         try:
             owner = User.query.get_or_404(user_id)
 
+            status_value = data.get('status', ProjectStatus.PLANNING.value)
+            try:
+                project_status = ProjectStatus[str(status_value).upper()]
+            except KeyError:
+                return {'error': 'Invalid project status'}, 400
+
+            start_date = None
+            end_date = None
+            if data.get('start_date'):
+                start_date = datetime.fromisoformat(str(data.get('start_date')).replace('Z', '+00:00'))
+            if data.get('end_date'):
+                end_date = datetime.fromisoformat(str(data.get('end_date')).replace('Z', '+00:00'))
+
             project = Project(
                 name=data.get('name'),
                 description=data.get('description'),
                 owner_id=owner.id,
-                status=data.get('status', 'active')
+                status=project_status,
+                start_date=start_date,
+                end_date=end_date,
+                estimated_hours=data.get('budget')
             )
 
             db.session.add(project)
@@ -69,9 +86,21 @@ class ProjectService:
         try:
             project = Project.query.get_or_404(project_id)
 
-            for field in ['name', 'description', 'status']:
-                if field in data:
-                    setattr(project, field, data[field])
+            if 'name' in data:
+                project.name = data['name']
+            if 'description' in data:
+                project.description = data['description']
+            if 'status' in data:
+                try:
+                    project.status = ProjectStatus[str(data['status']).upper()]
+                except KeyError:
+                    return {'error': 'Invalid project status'}, 400
+            if 'start_date' in data:
+                project.start_date = datetime.fromisoformat(str(data['start_date']).replace('Z', '+00:00')) if data['start_date'] else None
+            if 'end_date' in data:
+                project.end_date = datetime.fromisoformat(str(data['end_date']).replace('Z', '+00:00')) if data['end_date'] else None
+            if 'budget' in data:
+                project.estimated_hours = data['budget']
 
             db.session.commit()
             log_db_query("UPDATE", "projects")

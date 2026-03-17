@@ -65,8 +65,12 @@ class Project(db.Model):
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
             'owner': self.owner.to_dict() if self.owner else None,
+            'created_by': self.owner.to_dict() if self.owner else None,
+            'team_members': [member.user.to_dict() for member in self.team_members if member.user],
             'tasks_count': len(self.tasks),
+            'completed_tasks_count': sum(1 for task in self.tasks if task.status.value == 'DONE'),
             'sprints_count': len(self.sprints),
+            'active_sprints_count': sum(1 for sprint in self.sprints if sprint.status.value == 'ACTIVE'),
             'team_members_count': len(self.team_members)
         }
         

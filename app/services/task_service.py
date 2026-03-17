@@ -174,7 +174,12 @@ class TaskService:
             user = User.query.get_or_404(user_id)
 
             if task.project_id:
-                if not user.has_project_permission(task.project_id, 'delete_tasks') and task.project.owner_id != user_id and task.created_by_id != user_id:
+                is_project_owner = task.project.owner_id == user_id
+                is_task_assignee = task.assigned_to_id == user_id
+                has_delete_permission = user.has_project_permission(task.project_id, 'delete_tasks')
+                is_privileged_role = user.role.value in ['ADMIN', 'PROJECT_MANAGER']
+
+                if not (is_project_owner or is_task_assignee or has_delete_permission or is_privileged_role):
                     return {'error': 'Insufficient permissions to delete this task'}, 403
 
             db.session.delete(task)
