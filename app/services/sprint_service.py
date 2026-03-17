@@ -16,6 +16,17 @@ logger = get_logger('sprints')
 class SprintService:
 
     @staticmethod
+    def _parse_sprint_date(value, field_name):
+        """Parse sprint date input and return a datetime or a validation error."""
+        if not value:
+            return None, {'error': f'Missing required field: {field_name}'}, 400
+
+        try:
+            return datetime.fromisoformat(str(value).replace('Z', '+00:00')), None, None
+        except ValueError:
+            return None, {'error': f'Invalid date format for {field_name}. Use ISO 8601 or YYYY-MM-DD.'}, 400
+
+    @staticmethod
     def list_sprints(filters, page=1, per_page=10):
         """List sprints with optional filtering and pagination."""
         try:
@@ -84,8 +95,13 @@ class SprintService:
                 logger.warning(f"User {user_id} tried to create sprint without permission for project {project.id}")
                 return {'error': 'Insufficient permissions to create sprint'}, 403
 
-            start_date = datetime.fromisoformat(data.get('start_date').replace('Z', '+00:00'))
-            end_date = datetime.fromisoformat(data.get('end_date').replace('Z', '+00:00'))
+            start_date, error, status_code = SprintService._parse_sprint_date(data.get('start_date'), 'start_date')
+            if error:
+                return error, status_code
+
+            end_date, error, status_code = SprintService._parse_sprint_date(data.get('end_date'), 'end_date')
+            if error:
+                return error, status_code
 
             if start_date >= end_date:
                 return {'error': 'Start date must be before end date'}, 400
@@ -167,9 +183,16 @@ class SprintService:
                     return {'error': 'Invalid sprint status'}, 400
 
             if 'start_date' in data:
-                sprint.start_date = datetime.fromisoformat(data['start_date'].replace('Z', '+00:00'))
+                start_date, error, status_code = SprintService._parse_sprint_date(data['start_date'], 'start_date')
+                if error:
+                    return error, status_code
+                sprint.start_date = start_date
+
             if 'end_date' in data:
-                sprint.end_date = datetime.fromisoformat(data['end_date'].replace('Z', '+00:00'))
+                end_date, error, status_code = SprintService._parse_sprint_date(data['end_date'], 'end_date')
+                if error:
+                    return error, status_code
+                sprint.end_date = end_date
 
             if sprint.start_date >= sprint.end_date:
                 return {'error': 'Start date must be before end date'}, 400

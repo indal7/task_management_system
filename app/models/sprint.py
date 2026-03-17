@@ -30,6 +30,7 @@ class Sprint(db.Model):
     tasks = db.relationship('Task', back_populates='sprint')
 
     def to_dict(self, include_tasks=False):
+        completed_tasks_count = sum(1 for task in self.tasks if task.status.value == 'DONE')
         result = {
             'id': self.id,
             'name': self.name,
@@ -44,7 +45,15 @@ class Sprint(db.Model):
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
             'project': self.project.to_dict() if self.project else None,
-            'tasks_count': len(self.tasks)
+            'tasks_count': len(self.tasks),
+            'completed_tasks_count': completed_tasks_count,
+            'total_story_points': self.get_total_story_points(),
+            'completed_story_points': self.get_completed_story_points(),
+            'total_estimated_hours': self.get_total_estimated_hours(),
+            'total_actual_hours': self.get_total_actual_hours(),
+            'completion_percentage': round(self.get_completion_percentage(), 2),
+            'days_remaining': self.days_remaining(),
+            'is_active': self.is_active()
         }
         
         if include_tasks:
@@ -67,6 +76,14 @@ class Sprint(db.Model):
     def get_completed_story_points(self):
         """Get completed story points for this sprint."""
         return sum(task.story_points or 0 for task in self.tasks if task.status.value == 'DONE')
+
+    def get_total_estimated_hours(self):
+        """Get total estimated hours for all sprint tasks."""
+        return sum(task.estimated_hours or 0 for task in self.tasks)
+
+    def get_total_actual_hours(self):
+        """Get total actual hours logged for all sprint tasks."""
+        return sum(task.actual_hours or 0 for task in self.tasks)
 
     def get_burndown_data(self):
         """Get burndown chart data for this sprint."""
