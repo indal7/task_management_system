@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Production docker-compose – deployed on EC2.
 #
 # The application image is pulled from ECR; set ECR_IMAGE to the full URI
@@ -15,12 +13,13 @@ version: '3.8'
 
 services:
   app:
-    image: ${ECR_IMAGE:-taskmanager:prod}
+    image: ${ECR_IMAGE:?ECR_IMAGE must be set to a valid ECR image URI}
     container_name: taskmanager_app
     restart: unless-stopped
     environment:
       - FLASK_ENV=production
       - FLASK_APP=wsgi:app
+      - RUN_DB_MIGRATIONS_ON_START=${RUN_DB_MIGRATIONS_ON_START:-0}
     env_file:
       - ./env/.env.prod
     ports:

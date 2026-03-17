@@ -141,9 +141,26 @@ jobs:
             echo "📥 Pulling image: $ECR_IMAGE"
             docker pull "$ECR_IMAGE"
 
-            echo "🚀 Restarting application..."
+            ENV_FILE="/home/ubuntu/taskmanager/env/.env.prod"
+            if [ ! -f "$ENV_FILE" ]; then
+              echo "❌ Missing env file at $ENV_FILE"
+              echo "Create this file before deployment (or update compose/workflow path)."
+              exit 1
+            fi
+
+            echo "🧪 Validating compose configuration"
             cd /home/ubuntu/taskmanager
-            ECR_IMAGE="$ECR_IMAGE" \
+            ECR_IMAGE="$ECR_IMAGE" RUN_DB_MIGRATIONS_ON_START=0 docker compose -f docker-compose.prod.yml config > /dev/null
+
+            echo "🗃️ Running database migrations as a controlled release step"
+            docker run --rm --network host \
+              --env-file "$ENV_FILE" \
+              -w /app \
+              --entrypoint flask \
+              "$ECR_IMAGE" db upgrade
+
+            echo "🚀 Restarting application..."
+            ECR_IMAGE="$ECR_IMAGE" RUN_DB_MIGRATIONS_ON_START=0 \
               docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
             sleep 15
