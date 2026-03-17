@@ -3,6 +3,7 @@ import sys
 import json
 import random
 from datetime import datetime, timedelta, timezone
+from werkzeug.security import generate_password_hash
 
 # Ensure the project root is on the Python path so 'app' is importable
 # regardless of which directory the script is run from.
@@ -11,6 +12,19 @@ sys.path.insert(0, project_root)
 
 from app import create_app, db
 from app.models.user import User
+
+
+def make_user(name, email, password, role, **kwargs):
+    """Create a User directly without going through User.register() to avoid Redis dependency."""
+    user = User(
+        name=name,
+        email=email,
+        password_hash=generate_password_hash(password),
+        role=role,
+    )
+    for k, v in kwargs.items():
+        setattr(user, k, v)
+    return user
 from app.models.enums import TaskPriority, UserRole, TaskStatus, ProjectStatus, NotificationType, TaskType, SprintStatus
 from app.models.task import Task
 from app.models.project import Project
@@ -50,123 +64,74 @@ with app.app_context():
     # ===== USERS =====
     try:
         print("👥 Creating users...")
-        # Core team
-        admin = User.register(
-            name="Admin User", 
-            email="admin@example.com", 
-            password="admin123", 
-            role=UserRole.ADMIN
+        # Create users directly (bypasses cache/Redis in User.register())
+        admin = make_user(
+            name="Admin User", email="admin@example.com", password="admin123",
+            role=UserRole.ADMIN,
+            bio="System administrator with 10+ years of experience",
+            skills=json.dumps(["System Administration", "DevOps", "Security", "Database Management"]),
+            github_username="admin_user", timezone="UTC", daily_work_hours=8.0
         )
-        admin.bio = "System administrator with 10+ years of experience"
-        admin.skills = json.dumps(["System Administration", "DevOps", "Security", "Database Management"])
-        admin.github_username = "admin_user"
-        admin.timezone = "UTC"
-        admin.daily_work_hours = 8.0
-
-        manager = User.register(
-            name="Sarah Johnson", 
-            email="manager@example.com", 
-            password="manager123", 
-            role=UserRole.PROJECT_MANAGER
+        manager = make_user(
+            name="Sarah Johnson", email="manager@example.com", password="manager123",
+            role=UserRole.PROJECT_MANAGER,
+            bio="Experienced project manager specializing in agile methodologies",
+            skills=json.dumps(["Project Management", "Agile", "Scrum", "Team Leadership", "Risk Management"]),
+            github_username="sarah_pm",
+            linkedin_url="https://linkedin.com/in/sarah-johnson",
+            timezone="EST", daily_work_hours=8.0
         )
-        manager.bio = "Experienced project manager specializing in agile methodologies"
-        manager.skills = json.dumps(["Project Management", "Agile", "Scrum", "Team Leadership", "Risk Management"])
-        manager.github_username = "sarah_pm"
-        manager.linkedin_url = "https://linkedin.com/in/sarah-johnson"
-        manager.timezone = "EST"
-        manager.daily_work_hours = 8.0
-
-        team_lead = User.register(
-            name="Michael Chen", 
-            email="teamlead@example.com", 
-            password="lead123", 
-            role=UserRole.TEAM_LEAD
+        team_lead = make_user(
+            name="Michael Chen", email="teamlead@example.com", password="lead123",
+            role=UserRole.TEAM_LEAD,
+            bio="Technical team lead with expertise in full-stack development",
+            skills=json.dumps(["Team Leadership", "Full Stack Development", "Architecture", "Code Review", "Mentoring"]),
+            github_username="michael_chen", timezone="PST", daily_work_hours=8.0
         )
-        team_lead.bio = "Technical team lead with expertise in full-stack development"
-        team_lead.skills = json.dumps(["Team Leadership", "Full Stack Development", "Architecture", "Code Review", "Mentoring"])
-        team_lead.github_username = "michael_chen"
-        team_lead.timezone = "PST"
-        team_lead.daily_work_hours = 8.0
-
-        indal = User.register(
-            name="Indal Saroj", 
-            email="indalsaroj404@gmail.com", 
-            password="123456789", 
-            role=UserRole.SENIOR_DEVELOPER
+        indal = make_user(
+            name="Indal Saroj", email="indalsaroj404@gmail.com", password="123456789",
+            role=UserRole.SENIOR_DEVELOPER,
+            bio="Senior full-stack developer passionate about clean code and modern technologies",
+            skills=json.dumps(["Python", "JavaScript", "React", "Flask", "PostgreSQL", "Docker", "AWS", "UI/UX Design"]),
+            github_username="indalsaroj404",
+            linkedin_url="https://linkedin.com/in/indal-saroj",
+            timezone="IST", daily_work_hours=8.0, hourly_rate=75.0
         )
-        indal.bio = "Senior full-stack developer passionate about clean code and modern technologies"
-        indal.skills = json.dumps(["Python", "JavaScript", "React", "Flask", "PostgreSQL", "Docker", "AWS", "UI/UX Design"])
-        indal.github_username = "indalsaroj404"
-        indal.linkedin_url = "https://linkedin.com/in/indal-saroj"
-        indal.timezone = "IST"
-        indal.daily_work_hours = 8.0
-        indal.hourly_rate = 75.0
-
-        emp1 = User.register(
-            name="John Doe", 
-            email="john@example.com", 
-            password="john123", 
-            role=UserRole.DEVELOPER
+        emp1 = make_user(
+            name="John Doe", email="john@example.com", password="john123",
+            role=UserRole.DEVELOPER,
+            bio="Backend developer with strong problem-solving skills",
+            skills=json.dumps(["Python", "Django", "PostgreSQL", "REST APIs", "Git", "Linux"]),
+            github_username="johndoe_dev", timezone="EST", daily_work_hours=8.0, hourly_rate=60.0
         )
-        emp1.bio = "Backend developer with strong problem-solving skills"
-        emp1.skills = json.dumps(["Python", "Django", "PostgreSQL", "REST APIs", "Git", "Linux"])
-        emp1.github_username = "johndoe_dev"
-        emp1.timezone = "EST"
-        emp1.daily_work_hours = 8.0
-        emp1.hourly_rate = 60.0
-
-        emp2 = User.register(
-            name="Jane Smith", 
-            email="jane@example.com", 
-            password="jane123", 
-            role=UserRole.QA_ENGINEER
+        emp2 = make_user(
+            name="Jane Smith", email="jane@example.com", password="jane123",
+            role=UserRole.QA_ENGINEER,
+            bio="Quality assurance engineer focused on automation and testing strategies",
+            skills=json.dumps(["Test Automation", "Selenium", "Python", "Manual Testing", "Bug Tracking", "Performance Testing"]),
+            github_username="jane_qa", timezone="PST", daily_work_hours=8.0, hourly_rate=55.0
         )
-        emp2.bio = "Quality assurance engineer focused on automation and testing strategies"
-        emp2.skills = json.dumps(["Test Automation", "Selenium", "Python", "Manual Testing", "Bug Tracking", "Performance Testing"])
-        emp2.github_username = "jane_qa"
-        emp2.timezone = "PST"
-        emp2.daily_work_hours = 8.0
-        emp2.hourly_rate = 55.0
-
-        # Additional team members
-        designer = User.register(
-            name="Emily Rodriguez", 
-            email="emily@example.com", 
-            password="emily123", 
-            role=UserRole.UI_UX_DESIGNER
+        designer = make_user(
+            name="Emily Rodriguez", email="emily@example.com", password="emily123",
+            role=UserRole.UI_UX_DESIGNER,
+            bio="Creative UI/UX designer with a passion for user-centered design",
+            skills=json.dumps(["UI Design", "UX Research", "Figma", "Adobe Creative Suite", "Prototyping", "User Testing"]),
+            github_username="emily_design", timezone="MST", daily_work_hours=8.0, hourly_rate=65.0
         )
-        designer.bio = "Creative UI/UX designer with a passion for user-centered design"
-        designer.skills = json.dumps(["UI Design", "UX Research", "Figma", "Adobe Creative Suite", "Prototyping", "User Testing"])
-        designer.github_username = "emily_design"
-        designer.timezone = "MST"
-        designer.daily_work_hours = 8.0
-        designer.hourly_rate = 65.0
-
-        devops = User.register(
-            name="Alex Thompson", 
-            email="alex@example.com", 
-            password="alex123", 
-            role=UserRole.DEVOPS_ENGINEER
+        devops = make_user(
+            name="Alex Thompson", email="alex@example.com", password="alex123",
+            role=UserRole.DEVOPS_ENGINEER,
+            bio="DevOps engineer specializing in cloud infrastructure and automation",
+            skills=json.dumps(["AWS", "Docker", "Kubernetes", "CI/CD", "Terraform", "Monitoring", "Linux"]),
+            github_username="alex_devops", timezone="UTC", daily_work_hours=8.0, hourly_rate=80.0
         )
-        devops.bio = "DevOps engineer specializing in cloud infrastructure and automation"
-        devops.skills = json.dumps(["AWS", "Docker", "Kubernetes", "CI/CD", "Terraform", "Monitoring", "Linux"])
-        devops.github_username = "alex_devops"
-        devops.timezone = "UTC"
-        devops.daily_work_hours = 8.0
-        devops.hourly_rate = 80.0
-
-        analyst = User.register(
-            name="Lisa Wang", 
-            email="lisa@example.com", 
-            password="lisa123", 
-            role=UserRole.BUSINESS_ANALYST
+        analyst = make_user(
+            name="Lisa Wang", email="lisa@example.com", password="lisa123",
+            role=UserRole.BUSINESS_ANALYST,
+            bio="Business analyst bridging the gap between business and technology",
+            skills=json.dumps(["Business Analysis", "Requirements Gathering", "Process Modeling", "SQL", "Data Analysis"]),
+            github_username="lisa_analyst", timezone="EST", daily_work_hours=8.0, hourly_rate=70.0
         )
-        analyst.bio = "Business analyst bridging the gap between business and technology"
-        analyst.skills = json.dumps(["Business Analysis", "Requirements Gathering", "Process Modeling", "SQL", "Data Analysis"])
-        analyst.github_username = "lisa_analyst"
-        analyst.timezone = "EST"
-        analyst.daily_work_hours = 8.0
-        analyst.hourly_rate = 70.0
 
         db.session.add_all([admin, manager, team_lead, indal, emp1, emp2, designer, devops, analyst])
         db.session.commit()

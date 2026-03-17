@@ -40,7 +40,10 @@ class AuthService:
             logger.info(f"User {user.id} registered successfully")
 
             # Invalidate global user cache
-            invalidate_user_cache(user.id)
+            try:
+                invalidate_user_cache(user.id)
+            except Exception as cache_err:
+                logger.warning(f"Cache invalidation skipped (Redis unavailable): {cache_err}")
 
             return {"message": "User registered successfully", "user": user.to_dict()}
 

@@ -86,7 +86,10 @@ class User(db.Model):
             logger.info(f"User registered successfully: {user.id} - {email}")
             
             # Clear user list cache since we added a new user
-            cache.delete('all_users_list')
+            try:
+                cache.delete('all_users_list')
+            except Exception as cache_err:
+                logger.warning(f"Cache clear skipped (Redis unavailable): {cache_err}")
             
             return user
             
