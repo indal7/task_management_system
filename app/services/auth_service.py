@@ -1,5 +1,6 @@
 # app/services/auth_service.py
 from app.models.user import User
+from datetime import datetime
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
@@ -55,15 +56,43 @@ class AuthService:
             user = User.query.filter_by(email=email).first()
 
             if not user:
+                from app.services.activity_service import ActivityService
+                ActivityService.log(
+                    entity_type='auth',
+                    entity_id=0,
+                    action='LOGIN_FAILED',
+                    user_id=None,
+                    details={'email': email, 'reason': 'user_not_found'}
+                )
                 logger.warning(f"Login attempt failed. User not found: {email}")
                 return {"success": False, "error": "User not found, please register first"}
 
             if not user.check_password(password):
+                from app.services.activity_service import ActivityService
+                ActivityService.log(
+                    entity_type='auth',
+                    entity_id=user.id,
+                    action='LOGIN_FAILED',
+                    user_id=user.id,
+                    details={'email': email, 'reason': 'invalid_password'}
+                )
                 logger.warning(f"Login attempt failed. Invalid password for user: {email}")
                 return {"success": False, "error": "Invalid credentials"}
 
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+
             access_token = create_access_token(identity=str(user.id))
             refresh_token = create_refresh_token(identity=str(user.id))
+
+            from app.services.activity_service import ActivityService
+            ActivityService.log(
+                entity_type='auth',
+                entity_id=user.id,
+                action='LOGIN',
+                user_id=user.id,
+                details={'email': email, 'source': 'password_login'}
+            )
 
             logger.info(f"User {user.id} logged in successfully")
             return {

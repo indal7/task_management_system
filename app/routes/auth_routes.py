@@ -2,6 +2,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.services.auth_service import AuthService
+from app.services.activity_service import ActivityService
 from app.utils.response import (
     success_response, error_response, created_response,
     not_found_response, validation_error_response, server_error_response,
@@ -198,4 +199,52 @@ def refresh_token():
 def get_users():
     users = AuthService.get_all_users_ids_and_names()
     return success_response("Users retrieved successfully", users)
+
+
+@auth_bp.route('/logout', methods=['POST'])
+def logout():
+    """Record a logout event.
+
+    Supports standard authenticated API calls and sendBeacon payloads
+    where the token is sent in request body as { token: "..." }.
+    """
+    from flask_jwt_extended import decode_token
+    from app.models.user import User
+
+    data = request.get_json(silent=True) or {}
+    reason = data.get('reason', 'manual_logout')
+    source = data.get('source', 'api')
+
+    auth_header = request.headers.get('Authorization', '')
+    header_token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else None
+    body_token = data.get('token')
+    token = header_token or body_token
+
+    if not token:
+        logger.info("Logout called without token; returning success without activity log")
+        return success_response("Logout processed")
+
+    try:
+        decoded = decode_token(token)
+        user_id = decoded.get('sub')
+        user = User.query.get(user_id) if user_id else None
+
+        if user:
+            ActivityService.log(
+                entity_type='auth',
+                entity_id=user.id,
+                action='LOGOUT',
+                user_id=user.id,
+                details={'reason': reason, 'source': source}
+            )
+            logger.info(f"Logout recorded | User: {user.id} | Source: {source}")
+        else:
+            logger.warning("Logout token decoded but user not found")
+
+        return success_response("Logout processed")
+
+    except Exception as e:
+        logger.warning(f"Logout token decode failed: {str(e)}")
+        # Client still should be able to clear local session even if token is stale.
+        return success_response("Logout processed")
 
