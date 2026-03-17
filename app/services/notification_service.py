@@ -3,7 +3,7 @@ from app.models.notification import Notification
 from app.models.user import User
 from app.models.task import Task
 from app import db
-from app.utils.cache_utils import cache, cached_per_user, CacheKeys, invalidate_user_cache
+from app.utils.cache_utils import invalidate_user_cache
 from app.utils.logger import get_logger, log_db_query
 from sqlalchemy import func
 
@@ -13,7 +13,6 @@ logger = get_logger('notifications')
 class NotificationService:
 
     @staticmethod
-    @cached_per_user(timeout=300, key_prefix=CacheKeys.USER_NOTIFICATIONS)
     def get_notification_summary(user_id):
         """Get notification summary with counts and recent notifications."""
         try:
@@ -49,7 +48,6 @@ class NotificationService:
             return {'error': f'Error getting notification summary: {str(e)}'}, 500
 
     @staticmethod
-    @cached_per_user(timeout=300, key_prefix=CacheKeys.USER_NOTIFICATIONS)
     def get_user_notifications(user_id, unread_only=False):
         """Get all notifications for a user, optionally unread only."""
         try:

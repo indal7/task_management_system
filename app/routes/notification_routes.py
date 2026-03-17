@@ -47,7 +47,7 @@ def get_notification_summary():
 def get_notifications():
     user_id = get_jwt_identity()
     unread_only = request.args.get('unread_only', 'false').lower() == 'true'
-    cache_key = f"notifications:{user_id}:unread={unread_only}"
+    cache_key = f"notifications:{user_id}:unread={str(unread_only).lower()}"
 
     try:
         result = cache_notifications(
