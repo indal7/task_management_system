@@ -13,10 +13,16 @@ from app.utils.logger import get_logger, log_auth_event, log_cache_operation
 from app.utils.decorators import log_request
 from app import limiter
 import json
+from datetime import datetime
 
 
 auth_bp = Blueprint('auth_bp', __name__, url_prefix='/api/auth')
 logger = get_logger('auth')
+PRESENCE_TTL_SECONDS = 180
+
+
+def _presence_cache_key(user_id):
+    return f"presence:user:{user_id}"
 
 
 @auth_bp.route('/register', methods=['POST'])
@@ -247,4 +253,33 @@ def logout():
         logger.warning(f"Logout token decode failed: {str(e)}")
         # Client still should be able to clear local session even if token is stale.
         return success_response("Logout processed")
+
+
+@auth_bp.route('/presence/heartbeat', methods=['POST'])
+@jwt_required()
+def presence_heartbeat():
+    """Update transient online presence for the current user."""
+    user_id = get_jwt_identity()
+    now_iso = datetime.utcnow().isoformat()
+
+    cache.set(_presence_cache_key(user_id), now_iso, timeout=PRESENCE_TTL_SECONDS)
+    return success_response("Presence heartbeat recorded", {
+        'user_id': int(user_id),
+        'last_seen_at': now_iso,
+        'ttl_seconds': PRESENCE_TTL_SECONDS
+    })
+
+
+@auth_bp.route('/presence/status/<int:target_user_id>', methods=['GET'])
+@jwt_required()
+def presence_status(target_user_id):
+    """Return online/offline presence status for a user based on heartbeat TTL."""
+    last_seen_at = cache.get(_presence_cache_key(target_user_id))
+    is_online = bool(last_seen_at)
+
+    return success_response("Presence status retrieved", {
+        'user_id': target_user_id,
+        'is_online': is_online,
+        'last_seen_at': last_seen_at
+    })
 
