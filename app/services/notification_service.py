@@ -70,12 +70,15 @@ class NotificationService:
             notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
             if not notification:
                 logger.warning(f"Notification {notification_id} not found for user {user_id}")
-                return {'error': 'Notification not found'}, 404
+                return {'error': 'Notification not found'}
 
-            notification.read = True
-            db.session.commit()
-            log_db_query("UPDATE", "notifications")
-            logger.info(f"Notification {notification_id} marked as read for user {user_id}")
+            if not notification.read:
+                notification.read = True
+                from datetime import datetime
+                notification.read_at = datetime.utcnow()
+                db.session.commit()
+                log_db_query("UPDATE", "notifications")
+                logger.info(f"Notification {notification_id} marked as read for user {user_id}")
 
             # Invalidate user's notification cache
             invalidate_user_cache(user_id)
@@ -84,15 +87,18 @@ class NotificationService:
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error marking notification {notification_id} as read: {str(e)}")
-            return {'error': f'Error updating notification: {str(e)}'}, 500
+            return {'error': f'Error updating notification: {str(e)}'}
 
     @staticmethod
     def mark_all_notifications_as_read(user_id):
         """Mark all notifications as read for a user."""
         try:
+            from datetime import datetime
             notifications = Notification.query.filter_by(user_id=user_id, read=False).all()
+            now = datetime.utcnow()
             for notification in notifications:
                 notification.read = True
+                notification.read_at = now
 
             db.session.commit()
             log_db_query("UPDATE", "notifications")
@@ -101,11 +107,11 @@ class NotificationService:
             # Invalidate user's notification cache
             invalidate_user_cache(user_id)
 
-            return {'message': 'All notifications marked as read'}
+            return {'message': 'All notifications marked as read', 'updated_count': len(notifications)}
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error marking all notifications as read for user {user_id}: {str(e)}")
-            return {'error': f'Error updating notifications: {str(e)}'}, 500
+            return {'error': f'Error updating notifications: {str(e)}'}
 
     @staticmethod
     def delete_notification(notification_id, user_id):
@@ -114,7 +120,7 @@ class NotificationService:
             notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
             if not notification:
                 logger.warning(f"Notification {notification_id} not found for user {user_id}")
-                return {'error': 'Notification not found'}, 404
+                return {'error': 'Notification not found'}
 
             db.session.delete(notification)
             db.session.commit()
@@ -128,4 +134,4 @@ class NotificationService:
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error deleting notification {notification_id}: {str(e)}")
-            return {'error': f'Error deleting notification: {str(e)}'}, 500
+            return {'error': f'Error deleting notification: {str(e)}'}

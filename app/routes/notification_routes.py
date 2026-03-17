@@ -72,7 +72,9 @@ def mark_as_read(notification_id):
             logger.warning(f"Mark as read failed | Notification: {notification_id} | User: {user_id}")
             return not_found_response(result['error'])
         logger.info(f"Notification marked as read | Notification: {notification_id} | User: {user_id}")
-        cache.delete(f"notifications:summary:{user_id}")  # Invalidate summary cache
+        cache.delete(f"notifications:summary:{user_id}")
+        cache.delete(f"notifications:{user_id}:unread=false")
+        cache.delete(f"notifications:{user_id}:unread=true")
         return success_response("Notification marked as read", result)
     except Exception as e:
         logger.error(f"Error marking notification as read | Notification: {notification_id} | User: {user_id}: {e}", exc_info=True)
@@ -86,7 +88,9 @@ def mark_all_as_read():
     try:
         result = NotificationService.mark_all_notifications_as_read(user_id)
         logger.info(f"All notifications marked as read | User: {user_id}")
-        cache.delete(f"notifications:summary:{user_id}")  # Invalidate summary cache
+        cache.delete(f"notifications:summary:{user_id}")
+        cache.delete(f"notifications:{user_id}:unread=false")
+        cache.delete(f"notifications:{user_id}:unread=true")
         return success_response("All notifications marked as read", result)
     except Exception as e:
         logger.error(f"Error marking all notifications as read | User: {user_id}: {e}", exc_info=True)
@@ -103,7 +107,9 @@ def delete(notification_id):
             logger.warning(f"Delete notification failed | Notification: {notification_id} | User: {user_id}")
             return not_found_response(result['error'])
         logger.info(f"Notification deleted | Notification: {notification_id} | User: {user_id}")
-        cache.delete(f"notifications:summary:{user_id}")  # Invalidate summary cache
+        cache.delete(f"notifications:summary:{user_id}")
+        cache.delete(f"notifications:{user_id}:unread=false")
+        cache.delete(f"notifications:{user_id}:unread=true")
         return success_response("Notification deleted successfully")
     except Exception as e:
         logger.error(f"Error deleting notification | Notification: {notification_id} | User: {user_id}: {e}", exc_info=True)
