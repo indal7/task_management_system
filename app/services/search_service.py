@@ -14,6 +14,11 @@ logger = get_logger('search')
 class SearchService:
 
     @staticmethod
+    def _is_privileged_user(user):
+        role_value = getattr(getattr(user, 'role', None), 'value', getattr(user, 'role', None))
+        return role_value in ['ADMIN', 'PROJECT_MANAGER']
+
+    @staticmethod
     def _get_accessible_project_ids(user):
         if not user:
             return []
@@ -41,19 +46,25 @@ class SearchService:
             user = User.query.get_or_404(user_id)
             pattern = SearchService._build_search_pattern(query_str)
             accessible_project_ids = SearchService._get_accessible_project_ids(user)
+            is_privileged_user = SearchService._is_privileged_user(user)
 
             task_query = Task.query.filter(
                 db.or_(
                     Task.title.ilike(pattern),
                     Task.description.ilike(pattern),
                     Task.acceptance_criteria.ilike(pattern),
+                    db.cast(Task.status, db.String).ilike(pattern),
+                    db.cast(Task.priority, db.String).ilike(pattern),
+                    db.cast(Task.task_type, db.String).ilike(pattern),
                     db.cast(Task.id, db.String).ilike(pattern),
                     db.cast(Task.project_id, db.String).ilike(pattern),
                     db.cast(Task.sprint_id, db.String).ilike(pattern)
                 )
             )
 
-            if accessible_project_ids:
+            if is_privileged_user:
+                pass
+            elif accessible_project_ids:
                 task_query = task_query.filter(
                     db.or_(
                         Task.project_id.in_(accessible_project_ids),
@@ -77,15 +88,19 @@ class SearchService:
                 db.or_(
                     Project.name.ilike(pattern),
                     Project.description.ilike(pattern),
+                    db.cast(Project.status, db.String).ilike(pattern),
                     Project.client_name.ilike(pattern),
                     Project.client_email.ilike(pattern),
                     Project.repository_url.ilike(pattern),
                     Project.documentation_url.ilike(pattern),
+                    Project.technology_stack.ilike(pattern),
                     db.cast(Project.id, db.String).ilike(pattern)
                 )
             )
 
-            if accessible_project_ids:
+            if is_privileged_user:
+                pass
+            elif accessible_project_ids:
                 project_query = project_query.filter(Project.id.in_(accessible_project_ids))
             else:
                 project_query = project_query.filter(Project.owner_id == user_id)
@@ -97,13 +112,16 @@ class SearchService:
                     Sprint.name.ilike(pattern),
                     Sprint.description.ilike(pattern),
                     Sprint.goal.ilike(pattern),
+                    db.cast(Sprint.status, db.String).ilike(pattern),
                     db.cast(Sprint.id, db.String).ilike(pattern),
                     db.cast(Sprint.project_id, db.String).ilike(pattern),
                     Project.name.ilike(pattern)
                 )
             )
 
-            if accessible_project_ids:
+            if is_privileged_user:
+                pass
+            elif accessible_project_ids:
                 sprint_query = sprint_query.filter(Sprint.project_id.in_(accessible_project_ids))
             else:
                 sprint_query = sprint_query.filter(Project.owner_id == user_id)
@@ -139,9 +157,12 @@ class SearchService:
         try:
             user = User.query.get_or_404(user_id)
             accessible_project_ids = SearchService._get_accessible_project_ids(user)
+            is_privileged_user = SearchService._is_privileged_user(user)
             query = Task.query
 
-            if accessible_project_ids:
+            if is_privileged_user:
+                pass
+            elif accessible_project_ids:
                 query = query.filter(
                     db.or_(
                         Task.project_id.in_(accessible_project_ids),
