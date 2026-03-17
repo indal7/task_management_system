@@ -404,6 +404,72 @@ class TaskService:
             return {'error': f'Error fetching time logs: {str(e)}'}, 500
 
     @staticmethod
+    def update_time_log(task_id, time_log_id, user_id, hours=None, description=None, work_date=None):
+        """Update a time log for a task."""
+        try:
+            task = Task.query.get_or_404(task_id)
+            user = User.query.get_or_404(user_id)
+            time_log = TimeLog.query.filter_by(id=time_log_id, task_id=task_id, user_id=user_id).first()
+
+            if not time_log:
+                return {'error': 'Time log not found'}, 404
+
+            if task.project_id:
+                if not user.has_project_permission(task.project_id, 'create_tasks') and task.project.owner_id != user_id:
+                    return {'error': 'Insufficient permissions to update time on this task'}, 403
+
+            previous_hours = time_log.hours or 0
+
+            if hours is not None:
+                if hours <= 0:
+                    return {'error': 'Valid hours (> 0) are required'}, 400
+                time_log.hours = hours
+
+            if description is not None:
+                time_log.description = description
+
+            if work_date:
+                time_log.work_date = datetime.fromisoformat(work_date).date()
+
+            time_log.validate_hours()
+            task.actual_hours = max(0, (task.actual_hours or 0) - previous_hours + (time_log.hours or 0))
+            db.session.commit()
+
+            return time_log.to_dict(), 200
+
+        except ValueError as e:
+            db.session.rollback()
+            return {'error': str(e)}, 400
+        except Exception as e:
+            db.session.rollback()
+            return {'error': f'Error updating time log: {str(e)}'}, 500
+
+    @staticmethod
+    def delete_time_log(task_id, time_log_id, user_id):
+        """Delete a time log for a task."""
+        try:
+            task = Task.query.get_or_404(task_id)
+            user = User.query.get_or_404(user_id)
+            time_log = TimeLog.query.filter_by(id=time_log_id, task_id=task_id, user_id=user_id).first()
+
+            if not time_log:
+                return {'error': 'Time log not found'}, 404
+
+            if task.project_id:
+                if not user.has_project_permission(task.project_id, 'create_tasks') and task.project.owner_id != user_id:
+                    return {'error': 'Insufficient permissions to delete time on this task'}, 403
+
+            task.actual_hours = max(0, (task.actual_hours or 0) - (time_log.hours or 0))
+            db.session.delete(time_log)
+            db.session.commit()
+
+            return {'message': 'Time log deleted successfully'}, 200
+
+        except Exception as e:
+            db.session.rollback()
+            return {'error': f'Error deleting time log: {str(e)}'}, 500
+
+    @staticmethod
     def get_overdue_tasks(user_id):
         """Get overdue tasks for a user."""
         try:

@@ -421,6 +421,58 @@ def get_task_time_logs(task_id):
         return server_error_response(f'Error fetching time logs: {str(e)}')
 
 
+@task_bp.route('/<int:task_id>/time/<int:time_log_id>', methods=['PUT'])
+@jwt_required()
+def update_task_time_log(task_id, time_log_id):
+    """Update a specific time log for a task."""
+    user_id = get_jwt_identity()
+    data = request.get_json()
+
+    log_api_request(f'/api/tasks/{task_id}/time/{time_log_id}', 'PUT', user_id, request.remote_addr)
+
+    try:
+        if not data:
+            return validation_error_response('No data provided')
+
+        hours = data.get('hours')
+        description = data.get('description')
+        work_date = data.get('work_date')
+
+        result, status_code = TaskService.update_time_log(task_id, time_log_id, user_id, hours, description, work_date)
+
+        if status_code != 200:
+            return error_response(result.get('error', 'Error updating time log'), status_code=status_code)
+
+        invalidate_user_cache(user_id, 'user_time_logs')
+        return success_response('Time log updated successfully', result)
+
+    except Exception as e:
+        logger.error(f"Time log update error for task {task_id}, log {time_log_id}: {str(e)}")
+        return server_error_response(f'Error updating time log: {str(e)}')
+
+
+@task_bp.route('/<int:task_id>/time/<int:time_log_id>', methods=['DELETE'])
+@jwt_required()
+def delete_task_time_log(task_id, time_log_id):
+    """Delete a specific time log for a task."""
+    user_id = get_jwt_identity()
+
+    log_api_request(f'/api/tasks/{task_id}/time/{time_log_id}', 'DELETE', user_id, request.remote_addr)
+
+    try:
+        result, status_code = TaskService.delete_time_log(task_id, time_log_id, user_id)
+
+        if status_code != 200:
+            return error_response(result.get('error', 'Error deleting time log'), status_code=status_code)
+
+        invalidate_user_cache(user_id, 'user_time_logs')
+        return success_response('Time log deleted successfully', result)
+
+    except Exception as e:
+        logger.error(f"Time log deletion error for task {task_id}, log {time_log_id}: {str(e)}")
+        return server_error_response(f'Error deleting time log: {str(e)}')
+
+
 @task_bp.route('/time/daily-summary', methods=['GET'])
 @jwt_required()
 @cached_per_user(timeout=600, key_prefix="daily_time_summary")
