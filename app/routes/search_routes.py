@@ -57,7 +57,7 @@ def advanced_task_search():
                 except ValueError:
                     return validation_error_response(f'Invalid value for {int_key}')
 
-        result, status_code = SearchService.advanced_task_search(filters, page=page, per_page=per_page)
+        result, status_code = SearchService.advanced_task_search(filters, user_id, page=page, per_page=per_page)
         if status_code != 200:
             return error_response(result.get('error', 'Error searching tasks'), status_code=status_code)
         return success_response('Tasks retrieved successfully', result)
