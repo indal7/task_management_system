@@ -106,6 +106,7 @@ class TaskService:
                 acceptance_criteria=dto.get('acceptance_criteria'),
                 parent_task_id=dto.get('parent_task_id'),
                 labels=labels_json,
+                team_key=(dto.get('team_key') or None),
                 created_by_id=user.id,
                 assigned_to_id=dto.get('assigned_to_id')
             )
@@ -171,7 +172,7 @@ class TaskService:
             old_stage = TaskService._extract_workflow_stage(task.labels)
 
             # Basic updates
-            for field in ['title', 'description', 'acceptance_criteria']:
+            for field in ['title', 'description', 'acceptance_criteria', 'team_key']:
                 if field in dto:
                     setattr(task, field, dto[field])
 
@@ -344,6 +345,9 @@ class TaskService:
 
                 if filters.get('sprint_id'):
                     query = query.filter(Task.sprint_id == filters['sprint_id'])
+
+                if filters.get('team_key'):
+                    query = query.filter(Task.team_key == filters['team_key'])
 
                 if filters.get('assigned_to_id'):
                     query = query.filter(Task.assigned_to_id == filters['assigned_to_id'])

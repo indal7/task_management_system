@@ -75,6 +75,8 @@ def get_tasks():
             logger.debug(f"Filtering by project_id: {filters['project_id']}")
         if request.args.get('sprint_id'):
             filters['sprint_id'] = int(request.args.get('sprint_id'))
+        if request.args.get('team_key'):
+            filters['team_key'] = request.args.get('team_key').strip()
             
         # User filters
         if request.args.get('assigned_to_id'):

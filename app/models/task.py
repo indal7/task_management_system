@@ -40,6 +40,7 @@ class Task(db.Model):
     
     # Additional fields
     labels = db.Column(db.Text)  # JSON string of labels
+    team_key = db.Column(db.String(100), index=True)
     acceptance_criteria = db.Column(db.Text)
     
     # Dependencies
@@ -96,6 +97,7 @@ class Task(db.Model):
             'story_points': self.story_points,
             'estimation_unit': self.estimation_unit.value if self.estimation_unit else None,
             'labels': labels_list,
+            'team_key': self.team_key,
             'acceptance_criteria': self.acceptance_criteria,
             'parent_task_id': self.parent_task_id,
             'created_at': ist_isoformat(self.created_at),
