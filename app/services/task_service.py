@@ -5,6 +5,7 @@ from app.models.project import Project
 from app.models.sprint import Sprint
 from app.models.notification import Notification
 from app.models.time_log import TimeLog
+from app.models.task_workflow_history import TaskWorkflowHistory
 from app import db
 from app.models.enums import TaskStatus, TaskPriority, TaskType, NotificationType
 from datetime import datetime, timedelta
@@ -17,6 +18,53 @@ logger = get_logger('tasks')
 
 
 class TaskService:
+    @staticmethod
+    def _extract_workflow_stage(labels_value):
+        """Extract sprint board stage marker from labels list/json."""
+        labels = []
+
+        if isinstance(labels_value, str):
+            try:
+                labels = json.loads(labels_value)
+            except Exception:
+                labels = []
+        elif isinstance(labels_value, list):
+            labels = labels_value
+
+        for label in labels:
+            if isinstance(label, str) and label.startswith('__workflow_stage:'):
+                return label.split(':', 1)[1]
+        return None
+
+    @staticmethod
+    def _create_workflow_history(
+        task_id,
+        changed_by_id,
+        from_status=None,
+        to_status=None,
+        from_stage=None,
+        to_stage=None,
+        from_sprint_id=None,
+        to_sprint_id=None,
+        from_assignee_id=None,
+        to_assignee_id=None,
+        change_reason=None,
+    ):
+        entry = TaskWorkflowHistory(
+            task_id=task_id,
+            changed_by_id=changed_by_id,
+            from_status=from_status,
+            to_status=to_status,
+            from_stage=from_stage,
+            to_stage=to_stage,
+            from_sprint_id=from_sprint_id,
+            to_sprint_id=to_sprint_id,
+            from_assignee_id=from_assignee_id,
+            to_assignee_id=to_assignee_id,
+            change_reason=change_reason,
+        )
+        db.session.add(entry)
+
     @staticmethod
     def create_task(dto, user_id):
         """Create a new task with enhanced IT features."""
@@ -63,6 +111,22 @@ class TaskService:
             )
 
             db.session.add(task)
+            db.session.flush()
+
+            # Initial workflow snapshot
+            TaskService._create_workflow_history(
+                task_id=task.id,
+                changed_by_id=user_id,
+                from_status=None,
+                to_status=task.status.value,
+                from_stage=None,
+                to_stage=TaskService._extract_workflow_stage(labels_json),
+                from_sprint_id=None,
+                to_sprint_id=task.sprint_id,
+                from_assignee_id=None,
+                to_assignee_id=task.assigned_to_id,
+                change_reason='Task created'
+            )
             db.session.commit()
             logger.info(f"Task created successfully: {task.id} - '{task.title}' by user {user_id}")
             log_db_query("INSERT", "tasks")
@@ -103,6 +167,8 @@ class TaskService:
 
             old_assignee_id = task.assigned_to_id
             old_status = task.status
+            old_sprint_id = task.sprint_id
+            old_stage = TaskService._extract_workflow_stage(task.labels)
 
             # Basic updates
             for field in ['title', 'description', 'acceptance_criteria']:
@@ -146,6 +212,28 @@ class TaskService:
             if 'labels' in dto:
                 labels = dto['labels']
                 task.labels = json.dumps(labels) if labels else None
+
+            new_stage = TaskService._extract_workflow_stage(task.labels)
+
+            status_changed = task.status != old_status
+            sprint_changed = task.sprint_id != old_sprint_id
+            assignee_changed = task.assigned_to_id != old_assignee_id
+            stage_changed = old_stage != new_stage
+
+            if status_changed or sprint_changed or assignee_changed or stage_changed:
+                TaskService._create_workflow_history(
+                    task_id=task.id,
+                    changed_by_id=user_id,
+                    from_status=old_status.value if old_status else None,
+                    to_status=task.status.value if task.status else None,
+                    from_stage=old_stage,
+                    to_stage=new_stage,
+                    from_sprint_id=old_sprint_id,
+                    to_sprint_id=task.sprint_id,
+                    from_assignee_id=old_assignee_id,
+                    to_assignee_id=task.assigned_to_id,
+                    change_reason='Task updated'
+                )
 
             db.session.commit()
             logger.info(f"Task updated successfully: {task.id} - status: {task.status.value}")
@@ -564,3 +652,25 @@ class TaskService:
 
         except Exception as e:
             return {'error': f'Error fetching user time logs: {str(e)}'}, 500
+
+    @staticmethod
+    def get_task_history(task_id, user_id):
+        """Return task workflow transition history ordered by newest first."""
+        try:
+            task = Task.query.get_or_404(task_id)
+            user = User.query.get_or_404(user_id)
+
+            if task.project_id:
+                if not user.has_project_permission(task.project_id, 'create_tasks') and task.project.owner_id != user_id:
+                    return {'error': 'Insufficient permissions to view task history'}, 403
+
+            history = (
+                TaskWorkflowHistory.query
+                .filter_by(task_id=task_id)
+                .order_by(TaskWorkflowHistory.created_at.desc())
+                .all()
+            )
+
+            return [entry.to_dict() for entry in history], 200
+        except Exception as e:
+            return {'error': f'Error fetching task history: {str(e)}'}, 500

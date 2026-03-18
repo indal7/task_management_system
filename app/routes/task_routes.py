@@ -176,6 +176,22 @@ def get_one(task_id):
         return server_error_response(f'Error fetching task: {str(e)}')
 
 
+@task_bp.route('/<int:task_id>/history', methods=['GET'])
+@jwt_required()
+def get_task_history(task_id):
+    user_id = get_jwt_identity()
+    log_api_request(f'/api/tasks/{task_id}/history', 'GET', user_id, request.remote_addr)
+
+    try:
+        result, status_code = TaskService.get_task_history(task_id, user_id)
+        if status_code != 200:
+            return error_response(result.get('error', 'Error fetching task history'), status_code=status_code)
+        return success_response('Task workflow history retrieved successfully', result)
+    except Exception as e:
+        logger.error(f"Task history fetch error for task {task_id}: {str(e)}")
+        return server_error_response(f'Error fetching task history: {str(e)}')
+
+
 @task_bp.route('/<int:task_id>', methods=['PUT'])
 @jwt_required()
 def update(task_id):

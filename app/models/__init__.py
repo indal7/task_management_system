@@ -16,11 +16,12 @@ from .enums import (
 from .task_attachment import TaskAttachment
 from .task import Task
 from .activity_log import ActivityLog
+from .task_workflow_history import TaskWorkflowHistory
 
 
 __all__ = [
     'User', 'Task', 'Project', 'Sprint',
     'TaskComment', 'Notification', 'UserRole', 'TaskStatus',
     'TaskPriority', 'TaskType', 'ProjectStatus', 'SprintStatus',
-    'TaskAttachment', 'Task', 'ActivityLog'
+    'TaskAttachment', 'Task', 'ActivityLog', 'TaskWorkflowHistory'
 ]

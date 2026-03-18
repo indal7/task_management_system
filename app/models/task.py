@@ -82,6 +82,8 @@ class Task(db.Model):
             'status': self.status.value,
             'priority': self.priority.value,
             'task_type': self.task_type.value,
+            'project_id': self.project_id,
+            'sprint_id': self.sprint_id,
             'assigned_to': self.assignee.to_dict() if self.assignee else None,
             'created_by': self.creator.to_dict() if self.creator else None,
             'project': self.project.to_dict() if self.project else None,

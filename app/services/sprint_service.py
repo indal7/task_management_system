@@ -4,6 +4,7 @@ from app.models.project import Project
 from app.models.task import Task
 from app.models.user import User
 from app.models.notification import Notification
+from app.models.task_workflow_history import TaskWorkflowHistory
 from app.models.enums import SprintStatus, NotificationType, TaskStatus
 from app import db
 from datetime import datetime
@@ -373,9 +374,22 @@ class SprintService:
             if task.project_id != sprint.project_id:
                 return {'error': 'Task must belong to the same project as the sprint'}, 400
 
+            old_status = task.status
+            old_sprint_id = task.sprint_id
+
             task.sprint_id = sprint.id
             if task.status == TaskStatus.BACKLOG:
                 task.status = TaskStatus.TODO
+
+            db.session.add(TaskWorkflowHistory(
+                task_id=task.id,
+                changed_by_id=user_id,
+                from_status=old_status.value if old_status else None,
+                to_status=task.status.value if task.status else None,
+                from_sprint_id=old_sprint_id,
+                to_sprint_id=task.sprint_id,
+                change_reason='Task added to sprint'
+            ))
 
             db.session.commit()
             logger.info(f"Task {task_id} added to sprint {sprint_id} by user {user_id}")
@@ -398,8 +412,21 @@ class SprintService:
             if not user.has_project_permission(sprint.project_id, 'edit_tasks') and sprint.project.owner_id != user_id:
                 return {'error': 'Insufficient permissions to modify sprint tasks'}, 403
 
+            old_status = task.status
+            old_sprint_id = task.sprint_id
+
             task.sprint_id = None
             task.status = TaskStatus.BACKLOG
+
+            db.session.add(TaskWorkflowHistory(
+                task_id=task.id,
+                changed_by_id=user_id,
+                from_status=old_status.value if old_status else None,
+                to_status=task.status.value if task.status else None,
+                from_sprint_id=old_sprint_id,
+                to_sprint_id=task.sprint_id,
+                change_reason='Task removed from sprint'
+            ))
 
             db.session.commit()
             logger.info(f"Task {task_id} removed from sprint {sprint_id} by user {user_id}")
