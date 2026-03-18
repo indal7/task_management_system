@@ -93,7 +93,13 @@ def invalidate_user_cache(user_id, pattern="*"):
     try:
         client = cache.cache._client
         deleted = 0
-        for key in client.scan_iter(f"*user_{user_id}*{pattern}*"):
+        # Keys use format: {prefix}:user_{user_id}:{hash}
+        # Use flexible pattern that works regardless of prefix/user_id order
+        if pattern == "*":
+            scan_pattern = f"*user_{user_id}*"
+        else:
+            scan_pattern = f"*{pattern}*user_{user_id}*"
+        for key in client.scan_iter(scan_pattern):
             client.delete(key)
             deleted += 1
         if deleted > 0:
@@ -106,7 +112,12 @@ def invalidate_project_cache(project_id):
     try:
         client = cache.cache._client
         deleted = 0
-        for key in client.scan_iter(f"*project_{project_id}*"):
+        # Cache keys use colon format: projects:{id}, projects:{id}:stats, etc.
+        for key in client.scan_iter(f"*projects:{project_id}*"):
+            client.delete(key)
+            deleted += 1
+        # Also clear sprint caches (project_sprints:user_*) - can't filter by project_id in hash
+        for key in client.scan_iter(f"*project_sprints*"):
             client.delete(key)
             deleted += 1
         if deleted > 0:

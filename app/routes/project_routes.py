@@ -83,8 +83,10 @@ def update(project_id):
     try:
         result = ProjectService.update_project(project_id, data)
         logger.info(f"Project updated successfully | Project: {project_id}")
-        cache.delete(f"projects:{project_id}")  # Invalidate cache
-        cache.delete("projects:all")  # Invalidate list cache
+        user_id = get_jwt_identity()
+        cache.delete(f"projects:{project_id}")
+        cache.delete(f"projects:all:user:{user_id}")
+        cache.delete(f"projects:recent:user:{user_id}")
         return success_response("Project updated successfully", result)
     except Exception as e:
         logger.error(f"Error updating project {project_id}: {e}", exc_info=True)
@@ -97,8 +99,10 @@ def delete(project_id):
     try:
         result = ProjectService.delete_project(project_id)
         logger.info(f"Project deleted | Project: {project_id}")
-        cache.delete(f"projects:{project_id}")  # Invalidate cache
-        cache.delete("projects:all")
+        user_id = get_jwt_identity()
+        cache.delete(f"projects:{project_id}")
+        cache.delete(f"projects:all:user:{user_id}")
+        cache.delete(f"projects:recent:user:{user_id}")
         return success_response("Project deleted successfully", result)
     except Exception as e:
         logger.error(f"Error deleting project {project_id}: {e}", exc_info=True)
@@ -113,8 +117,10 @@ def update_put(project_id):
     try:
         result = ProjectService.update_project(project_id, data)
         logger.info(f"Project updated (PUT) successfully | Project: {project_id}")
+        user_id = get_jwt_identity()
         cache.delete(f"projects:{project_id}")
-        cache.delete("projects:all")
+        cache.delete(f"projects:all:user:{user_id}")
+        cache.delete(f"projects:recent:user:{user_id}")
         return success_response("Project updated successfully", result)
     except Exception as e:
         logger.error(f"Error updating project {project_id}: {e}", exc_info=True)
