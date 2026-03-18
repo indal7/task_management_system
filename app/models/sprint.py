@@ -2,6 +2,7 @@
 from app import db
 from datetime import datetime
 from .enums import SprintStatus
+from app.utils.timezone_utils import ist_isoformat
 
 class Sprint(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -37,13 +38,13 @@ class Sprint(db.Model):
             'description': self.description,
             'status': self.status.value,
             'project_id': self.project_id,
-            'start_date': self.start_date.isoformat(),
-            'end_date': self.end_date.isoformat(),
+            'start_date': ist_isoformat(self.start_date),
+            'end_date': ist_isoformat(self.end_date),
             'goal': self.goal,
             'capacity_hours': self.capacity_hours,
             'velocity_points': self.velocity_points,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
+            'created_at': ist_isoformat(self.created_at),
+            'updated_at': ist_isoformat(self.updated_at),
             'project': self.project.to_dict() if self.project else None,
             'tasks_count': len(self.tasks),
             'completed_tasks_count': completed_tasks_count,

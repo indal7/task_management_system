@@ -1,6 +1,7 @@
 # app/models/project_member.py
 from app import db
 from datetime import datetime
+from app.utils.timezone_utils import ist_isoformat
 
 class ProjectMember(db.Model):
     __tablename__ = 'project_members'
@@ -39,8 +40,8 @@ class ProjectMember(db.Model):
             'can_delete_tasks': self.can_delete_tasks,
             'can_manage_sprints': self.can_manage_sprints,
             'can_manage_members': self.can_manage_members,
-            'joined_at': self.joined_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
+            'joined_at': ist_isoformat(self.joined_at),
+            'updated_at': ist_isoformat(self.updated_at),
             'project': self.project.to_dict() if self.project else None,
             'user': self.user.to_dict() if self.user else None
         }

@@ -1,6 +1,7 @@
 # app/models/activity_log.py
 from app import db
 from datetime import datetime
+from app.utils.timezone_utils import ist_isoformat
 
 
 class ActivityLog(db.Model):
@@ -40,5 +41,5 @@ class ActivityLog(db.Model):
             'entity_id': self.entity_id,
             'action': self.action,
             'details': details_data,
-            'created_at': self.created_at.isoformat(),
+            'created_at': ist_isoformat(self.created_at),
         }

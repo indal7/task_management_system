@@ -1,7 +1,8 @@
 # app/models/notification.py
 from app import db
-from datetime import datetime
+from datetime import datetime, timedelta
 from .enums import NotificationType
+from app.utils.timezone_utils import ist_isoformat
 
 class Notification(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -44,8 +45,8 @@ class Notification(db.Model):
             'project_id': self.project_id,
             'sprint_id': self.sprint_id,
             'read': self.read,
-            'read_at': self.read_at.isoformat() if self.read_at else None,
-            'created_at': self.created_at.isoformat(),
+            'read_at': ist_isoformat(self.read_at),
+            'created_at': ist_isoformat(self.created_at),
             'task': self.task.to_dict() if self.task else None,
             'related_user': self.related_user.to_dict() if self.related_user else None,
             'project': self.project.to_dict() if self.project else None,
@@ -102,7 +103,7 @@ class Notification(db.Model):
     @classmethod
     def cleanup_old_notifications(cls, days=30):
         """Delete notifications older than specified days."""
-        cutoff_date = datetime.utcnow() - datetime.timedelta(days=days)
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
         old_notifications = cls.query.filter(cls.created_at < cutoff_date).all()
         count = len(old_notifications)
         

@@ -2,6 +2,7 @@
 from app import db
 from datetime import datetime
 from app.utils.logger import get_logger
+from app.utils.timezone_utils import ist_isoformat
 
 logger = get_logger('time_log')
 
@@ -37,8 +38,8 @@ class TimeLog(db.Model):
             'hours': self.hours,
             'description': self.description,
             'work_date': self.work_date.isoformat(),
-            'logged_at': self.logged_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
+            'logged_at': ist_isoformat(self.logged_at),
+            'updated_at': ist_isoformat(self.updated_at),
             'task': self.task.to_dict() if self.task else None,
             'user': self.user.to_dict() if self.user else None,
             'hours_formatted': self.get_formatted_hours()

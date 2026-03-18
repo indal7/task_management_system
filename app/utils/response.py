@@ -1,7 +1,7 @@
 # app/utils/response.py
 from flask import jsonify
-from datetime import datetime
 from typing import Any, Dict, Optional
+from app.utils.timezone_utils import now_ist_isoformat
 
 class Response:
     """Single standardized API response utility."""
@@ -31,7 +31,7 @@ class Response:
             'success': success,
             'message': message,
             'data': data,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': now_ist_isoformat()
         }
         
         # Add any additional fields passed via kwargs

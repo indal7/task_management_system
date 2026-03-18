@@ -1,6 +1,7 @@
 # app/models/user.py
 from app import db
 from datetime import datetime
+from app.utils.timezone_utils import ist_isoformat
 import json
 from werkzeug.security import generate_password_hash, check_password_hash
 from .enums import UserRole
@@ -322,9 +323,9 @@ class User(db.Model):
             'timezone': self.timezone,
             'daily_work_hours': self.daily_work_hours,
             'is_active': self.is_active,
-            'last_login': self.last_login.isoformat() if self.last_login else None,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat()
+             'last_login': ist_isoformat(self.last_login),
+             'created_at': ist_isoformat(self.created_at),
+             'updated_at': ist_isoformat(self.updated_at)
         }
         
         if include_sensitive:

@@ -1,6 +1,7 @@
 # app/models/task_comment.py
 from app import db
 from datetime import datetime
+from app.utils.timezone_utils import ist_isoformat
 
 class TaskComment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -20,7 +21,7 @@ class TaskComment(db.Model):
             'task_id': self.task_id,
             'user_id': self.user_id,
             'comment': self.comment,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
+            'created_at': ist_isoformat(self.created_at),
+            'updated_at': ist_isoformat(self.updated_at),
             'user': self.user.to_dict() if self.user else None
         }

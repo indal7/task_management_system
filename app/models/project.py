@@ -1,6 +1,7 @@
 # app/models/project.py
 from app import db
 from datetime import datetime
+from app.utils.timezone_utils import ist_isoformat
 
 from app.models.project_member import ProjectMember
 from .enums import ProjectStatus
@@ -57,13 +58,13 @@ class Project(db.Model):
             'repository_url': self.repository_url,
             'documentation_url': self.documentation_url,
             'technology_stack': tech_stack,
-            'start_date': self.start_date.isoformat() if self.start_date else None,
-            'end_date': self.end_date.isoformat() if self.end_date else None,
+            'start_date': ist_isoformat(self.start_date),
+            'end_date': ist_isoformat(self.end_date),
             'estimated_hours': self.estimated_hours,
             'client_name': self.client_name,
             'client_email': self.client_email,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
+            'created_at': ist_isoformat(self.created_at),
+            'updated_at': ist_isoformat(self.updated_at),
             'owner': self.owner.to_dict() if self.owner else None,
             'created_by': self.owner.to_dict() if self.owner else None,
             'team_members': [member.user.to_dict() for member in self.team_members if member.user],

@@ -2,6 +2,7 @@
 from app import db
 from datetime import datetime
 import os
+from app.utils.timezone_utils import ist_isoformat
 
 class TaskAttachment(db.Model):
     __tablename__ = 'task_attachments'
@@ -34,7 +35,7 @@ class TaskAttachment(db.Model):
             'file_path': self.file_path,
             'file_size': self.file_size,
             'mime_type': self.mime_type,
-            'uploaded_at': self.uploaded_at.isoformat(),
+            'uploaded_at': ist_isoformat(self.uploaded_at),
             'uploaded_by': self.uploaded_by.to_dict() if self.uploaded_by else None,
             'file_size_formatted': self.get_formatted_file_size()
         }

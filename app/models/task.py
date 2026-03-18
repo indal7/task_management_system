@@ -3,6 +3,7 @@ from app import db
 from datetime import datetime
 from .enums import TaskStatus, TaskPriority, TaskType, EstimationUnit
 from app.utils.logger import get_logger
+from app.utils.timezone_utils import ist_isoformat
 
 logger = get_logger('task')
 
@@ -85,9 +86,9 @@ class Task(db.Model):
             'created_by': self.creator.to_dict() if self.creator else None,
             'project': self.project.to_dict() if self.project else None,
             'sprint': self.sprint.to_dict() if self.sprint else None,
-            'due_date': self.due_date.isoformat() if self.due_date else None,
-            'start_date': self.start_date.isoformat() if self.start_date else None,
-            'completion_date': self.completion_date.isoformat() if self.completion_date else None,
+            'due_date': ist_isoformat(self.due_date),
+            'start_date': ist_isoformat(self.start_date),
+            'completion_date': ist_isoformat(self.completion_date),
             'estimated_hours': self.estimated_hours,
             'actual_hours': self.actual_hours,
             'story_points': self.story_points,
@@ -95,8 +96,8 @@ class Task(db.Model):
             'labels': labels_list,
             'acceptance_criteria': self.acceptance_criteria,
             'parent_task_id': self.parent_task_id,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
+            'created_at': ist_isoformat(self.created_at),
+            'updated_at': ist_isoformat(self.updated_at),
             'comments_count': len(self.comments),
             'attachments_count': len(self.attachments),
             'time_logs_count': len(self.time_logs)
