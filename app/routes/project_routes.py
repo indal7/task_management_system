@@ -54,7 +54,8 @@ def create():
 @jwt_required()
 def get_all():
     try:
-        result = cache_result("projects:all", ProjectService.get_all_projects)
+        user_id = get_jwt_identity()
+        result = cache_result(f"projects:all:user:{user_id}", ProjectService.get_all_projects)
         logger.info("All projects retrieved successfully")
         return success_response("Projects retrieved successfully", result)
     except Exception as e:
@@ -155,7 +156,8 @@ def get_progress(project_id):
 @jwt_required()
 def get_recent():
     try:
-        result = cache_result("projects:recent", ProjectService.get_recent_projects)
+        user_id = get_jwt_identity()
+        result = cache_result(f"projects:recent:user:{user_id}", ProjectService.get_recent_projects)
         logger.info("Recent projects retrieved successfully")
         return success_response("Recent projects retrieved successfully", result)
     except Exception as e:
