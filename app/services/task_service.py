@@ -247,7 +247,14 @@ class TaskService:
             if task.project_id:
                 invalidate_project_cache(task.project_id)
 
-            TaskService._handle_task_update_notifications(task, user_id, old_assignee_id, old_status)
+            TaskService._handle_task_update_notifications(
+                task,
+                user_id,
+                old_assignee_id,
+                old_status,
+                old_stage,
+                new_stage
+            )
 
             return task.to_dict(), 200
 
@@ -577,7 +584,7 @@ class TaskService:
             return {'error': f'Error fetching overdue tasks: {str(e)}'}, 500
 
     @staticmethod
-    def _handle_task_update_notifications(task, user_id, old_assignee_id, old_status):
+    def _handle_task_update_notifications(task, user_id, old_assignee_id, old_status, old_stage=None, new_stage=None):
         """Handle notifications for task updates."""
         user = User.query.get(user_id)
 
@@ -592,7 +599,10 @@ class TaskService:
                 project_id=task.project_id
             )
 
-        if task.status != old_status:
+        status_changed = task.status != old_status
+        stage_changed = old_stage != new_stage
+
+        if status_changed or stage_changed:
             notification_users = set()
             if task.assigned_to_id and task.assigned_to_id != user_id:
                 notification_users.add(task.assigned_to_id)
@@ -600,9 +610,15 @@ class TaskService:
                 notification_users.add(task.created_by_id)
 
             for notify_user_id in notification_users:
-                if task.status == TaskStatus.DONE:
+                if status_changed and task.status == TaskStatus.DONE:
                     notification_type = NotificationType.TASK_COMPLETED
                     message = f"{user.name} marked task '{task.title}' as completed"
+                elif stage_changed and old_stage and new_stage and task.status == old_status:
+                    notification_type = NotificationType.TASK_UPDATED
+                    message = (
+                        f"{user.name} moved task '{task.title}' from "
+                        f"{old_stage.replace('_', ' ').title()} to {new_stage.replace('_', ' ').title()}"
+                    )
                 else:
                     notification_type = NotificationType.TASK_UPDATED
                     message = f"{user.name} updated task '{task.title}' status to {task.status.value}"
